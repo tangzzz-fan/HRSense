@@ -12,6 +12,7 @@ let package = Package(
         .library(name: "HRSenseFeature",      targets: ["HRSenseFeature"]),
         .library(name: "HRSenseSimulatorKit", targets: ["HRSenseSimulatorKit"]),
         .executable(name: "HRSenseSimulator", targets: ["HRSenseSimulator"]),
+        .executable(name: "HRSenseApp",       targets: ["HRSenseApp"]),
     ],
     dependencies: [
         .package(url: "https://github.com/tangzzz-fan/TGReduxKit.git", from: "2.0.0"),
@@ -32,6 +33,8 @@ let package = Package(
                 dependencies: ["HRSenseProtocol"]),
         .executableTarget(name: "HRSenseSimulator",
                 dependencies: ["HRSenseSimulatorKit"]),
+        .executableTarget(name: "HRSenseApp",
+                dependencies: ["HRSenseFeature", "HRSenseData", "HRSenseCore", "HRSenseProtocol"]),
         .testTarget(name: "HRSenseProtocolTests", dependencies: ["HRSenseProtocol"]),
         .testTarget(name: "HRSenseComputeTests", dependencies: ["HRSenseCompute"]),
         .testTarget(name: "HRSenseDataTests", dependencies: ["HRSenseData"]),
