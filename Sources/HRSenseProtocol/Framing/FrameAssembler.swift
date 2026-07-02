@@ -155,6 +155,11 @@ public final class FrameAssembler: @unchecked Sendable {
             guard let command = CommandCodec.decode(body: body) else { return nil }
             return .command(command)
         case .data:
+            // Route by DataKind: 0x01 → DeviceSample, 0x02 → WaveformBlock
+            if body.first == DataKind.waveform.rawValue {
+                guard let wf = WaveformDecoder.decode(body: body) else { return nil }
+                return .waveform(wf)
+            }
             guard let sample = DataCodec.decode(body: body) else { return nil }
             return .data(sample)
         case .ack:

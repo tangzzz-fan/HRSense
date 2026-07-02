@@ -111,8 +111,8 @@ public final class BLECentralDataSource: NSObject, @unchecked Sendable {
             case .data(let sample):
                 metricsCollector.recordSampleReceived()
                 heartRateContinuation?.yield(dataParser.parseSample(sample))
-            case .command, .ack, .event:
-                break // Routed by DeviceRepositoryImpl in M4
+            case .command, .ack, .event, .waveform:
+                break // Routed by DeviceRepositoryImpl
             }
         }
     }
