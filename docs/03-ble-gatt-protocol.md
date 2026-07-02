@@ -236,6 +236,7 @@ Dev → App: HELLO_ACK { protoVersion:1, capabilities, model, fw }
 - **v1 默认**：L4 用**自定义 TLV**（字节紧凑、无依赖、适合 MCU）。
 - **可选 Protobuf 承载**：把 L4 的 `Frame Body` 定义为一段 **Protobuf 序列化字节**（`.proto` 与固件/算法共享 schema，生成 Swift/嵌入式代码）。
   - 适用：字段多、演进快、跨端团队协作，Protobuf 的**向前/后兼容**与代码生成优势明显。
+  - 跨端含义：若未来需要与 **Android** 共用应用层消息模型，优先共享 `.proto` schema；iOS / Android / FW 共同遵守同一份字段契约，而 **BLE GATT + L2 分帧/可靠传输** 仍保持本协议定义。
   - 取舍：Protobuf 有一定体积/解析开销，MCU 侧需 nanopb 等轻量实现。
 - **协商方式**：在 `HELLO`/`capabilities` 增一位 `PROTOBUF_PAYLOAD` 声明支持；`Frame` 的 `Type` 可用一个取值区分"TLV 负载 / Protobuf 负载"，实现**两种编码共存**。
 - **落点**：`.proto` schema 放 `proto/` 目录（见 `08`）；此为**可选实现**，v1 以 TLV 为准。

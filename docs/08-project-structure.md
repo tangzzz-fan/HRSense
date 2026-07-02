@@ -46,7 +46,7 @@ HRSense/
 │           └── Assets.xcassets/
 ├── Models/                       # CoreML 模型资源(.mlpackage)，Git LFS 跟踪
 │   └── StressClassifier_v1.mlpackage
-├── proto/                        # (可选)Protobuf .proto schema，与 FW 共享(见 03 §6.4)
+├── proto/                        # (可选)Protobuf .proto schema，与 iOS/Android/FW 共享(见 03 §6.4)
 ├── Scenarios/                    # 模拟器场景脚本(JSON) + 录制数据集(CSV)
 ├── HRSense.xcworkspace           # 工作区：聚合两个 app 工程 + 本地 Package
 ├── docs/                         # 本仓库文档
@@ -153,6 +153,7 @@ Sources/HRSenseProtocol/
 └── Capabilities.swift
 ```
 - 无外部依赖；纯字节 in/out，黄金样例(golden bytes)单测。
+- 若启用 Protobuf，它仍属于 **L4 应用负载编码** 的一部分：`.proto` 放仓库根的 `proto/`，生成代码由 iOS / Android / FW 各自消费；`HRSenseProtocol` 继续负责 **L2–L4 的 framing/协商/编解码入口**，而不是把 Protobuf 放到 UI 或存储层。
 
 ### 5.2 `HRSenseCore`（Domain）
 ```text

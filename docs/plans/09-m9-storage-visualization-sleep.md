@@ -4,6 +4,8 @@
 
 持久化 + 高性能图表 + 睡眠 hypnogram。采用 SwiftData（结构化）+ 文件系统（波形大块）混合存储方案。包含数据保留/归档策略。
 
+**迁移预留**：当前实现先落 `SwiftDataStore`，但架构必须假设后续可能因**重数据量、强查询、复杂聚合**迁移到 `SQLite/GRDB`。因此 M9 的协议、实体、文件格式和查询语义都要与具体 DB 解耦。
+
 **依赖**：M5（波形）、M8（计算/CoreML）。
 
 ---
@@ -28,6 +30,8 @@ querySessions / queryHeartRate / queryHRVMetrics / querySleepSessions
 aggregateHeartRate / purgeExpiredData
 ```
 
+要求：该协议既要覆盖当前 `SwiftDataStore`，也要能被未来 `GRDBStore` 直接实现；禁止把 `SwiftData` 专属类型泄漏到 `HRSenseCore` 与 `HRSenseFeature`。
+
 ---
 
 ## 阶段 2：SwiftDataStore 实现（HRSenseData）
@@ -38,6 +42,10 @@ aggregateHeartRate / purgeExpiredData
 | `SwiftDataStore.swift` | 实现 `PersistenceStore`，专用 `ModelActor` 后台写入 |
 | `BackgroundWriteBuffer.swift` | 内存批量累积（阈值 100/5s 定时），后台写入不阻塞 UI/BLE |
 | `DataAggregation.swift` | min/avg/max 桶聚合，原始点降采样归档 |
+
+实施约束：
+- 所有查询/聚合入口先收敛为 `PersistenceStore` 的抽象接口，不直接暴露 `ModelContext` 查询细节。
+- `SwiftDataStore` 的模型映射层与查询层分离，便于未来平移到 `GRDBStore`。
 
 ---
 
@@ -105,6 +113,7 @@ aggregateHeartRate / purgeExpiredData
 - [ ] 保留策略生效：过期波形清理、原始点降采样归档
 - [ ] 整夜 replay → 睡眠阶段带状图显示
 - [ ] 存储写入不阻塞 UI/BLE（后台批量写）
+- [ ] `PersistenceStore` 抽象不泄漏 `SwiftData` 专属类型；可为未来 `SQLite/GRDB` 替换保留兼容接口
 
 ## 预估文件数：~45 个新文件
 

@@ -29,6 +29,7 @@
 - **结构化数据 → SwiftData（iOS 17+ 基线一致）**：模型即代码、查询方便、与 SwiftUI 契合；如需更强 SQL 控制/性能可换 **GRDB(SQLite)**（保留为备选）。
 - **大块原始数据（波形/整段采样）→ 文件**（如二进制/压缩），DB 只存**元数据 + 文件引用**。
 - 理由：小而多的指标用 DB 查询聚合，大而重的波形用文件避免撑爆 DB。
+- **迁移预留（固化）**：真实业务若进入**重数据量、强查询、复杂聚合**阶段，很多团队最终会落到 **SQLite/GRDB**。因此当前架构必须从第一天就按“**接口先行、实现可替换**”设计，而不是把 `SwiftData` 能力泄漏到上层。
 
 ### 3.2 数据模型（草案）
 
@@ -58,6 +59,10 @@ graph TD
 - `HRSenseData` 提供 `SwiftDataStore`（结构化）+ `WaveformFileStore`（文件）实现。
 - **写入走后台**（不阻塞 BLE/UI）；**批量写**（攒够一批或定时 flush），减少 IO。
 - 读/聚合走查询接口，UI/图表按需拉取（配合 `04` 有界内存窗口）。
+- **架构约束**：
+  - 上层只依赖 `PersistenceStore` / Repository 协议，不得直接依赖 `SwiftData` 的 `@Model` / `ModelContext` / 查询 DSL。
+  - `SwiftDataStore` 与未来 `GRDBStore` 必须复用同一组 Domain 实体、查询语义与聚合接口。
+  - 波形文件格式与 `WaveformBlobRef` 元数据解耦于具体 DB 实现，确保替换结构化存储时无需迁移波形二进制格式。
 
 ### 3.4 保留 / 归档策略（已定）
 
@@ -72,11 +77,18 @@ graph TD
 
 ### 3.5 迁移
 - SwiftData/GRDB 均支持 schema 版本迁移；模型变更走版本化迁移，避免破坏历史数据。
+- 迁移默认路径：`SwiftDataStore -> GRDBStore`，保持 `PersistenceStore` 协议、Repository 接口、Domain 实体和 `WaveformFileStore` 不变。
+- 触发迁移的典型信号：
+  - 需要更复杂的 SQL 聚合、窗口函数、手写索引与 explain 调优。
+  - 日/周/月查询与统计在真实数据量下出现不可接受的延迟。
+  - 需要更强的跨平台一致性或导入/导出 SQLite 数据资产。
+- 为控制迁移成本，禁止在上层编写任何绑定 `SwiftData` 的业务逻辑或谓词细节。
 
 ## 4. 备选方案与取舍
 - **Core Data（未选为默认）**：成熟但样板多；SwiftData 更贴合 iOS 17 基线。
 - **全量入 DB（含波形）（未采用）**：DB 膨胀、写入压力大 → 波形走文件。
 - **GRDB（备选）**：需要精细 SQL/更高性能时切换，接口经 `PersistenceStore` 抽象，切换成本可控。
+- **直接默认 SQLite（未选）**：能力最强，但当前阶段实现和样板成本更高；先用 SwiftData 打通闭环，同时保留明确迁移口。
 
 ## 5. 影响面
 - `HRSenseCore`：新增 `PersistenceStore` 协议 + 存储相关实体。
@@ -92,6 +104,7 @@ graph TD
 ## 7. 风险与开放问题
 - [x] 选型：SwiftData(结构化) + 文件(波形)，GRDB 备选。
 - [x] 保留策略：波形短期、原始点降采样、指标长期。
+- [x] 架构预留：上层只依赖 `PersistenceStore`，允许后续切换到 SQLite/GRDB。
 - [ ] 是否需要**静态数据加密**（健康隐私）→ 评估 `FileProtection` / DB 加密（如 SQLCipher）。
 - [ ] 是否需要导出（用户数据导出/分享）。
 - [ ] 云同步预留（本期不做）。

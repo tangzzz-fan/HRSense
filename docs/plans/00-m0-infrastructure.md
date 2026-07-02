@@ -163,7 +163,7 @@ module HRSenseComputeCxx {
 
 - `Models/` — CoreML 模型（M8 填充）
 - `Scenarios/` — 场景脚本 + 数据集（M2 填充）
-- `proto/` — Protobuf schema（可选，M8）
+- `proto/` — Protobuf schema（可选，M8；供 iOS/Android/FW 共享应用层消息契约）
 - `tools/` — 转换脚本（M8 填充）
 
 ---

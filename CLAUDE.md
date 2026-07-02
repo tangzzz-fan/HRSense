@@ -15,7 +15,13 @@ swift build          # Root Package.swift with multiple targets
 swift test           # Run all unit tests
 swift test --filter HRSenseProtocolTests  # Run a single test target
 xcodebuild -workspace HRSense.xcworkspace -scheme HRSenseApp build
+xcodebuild -workspace HRSense.xcworkspace -scheme HRSenseSimulator build
 ```
+
+Execution-quality notes for when code exists:
+- Treat **both** `HRSenseApp` and `HRSenseSimulator` as first-class executables. Do not validate only the iOS app shell while ignoring simulator build health.
+- Milestone acceptance is not satisfied by compile success alone; use `docs/11-delivery-plan.md` as the executable gate and run the milestone-specific checks that apply (unit tests, headless simulator scenarios, real-device + simulator E2E where required).
+- The simulator is a permanent CI/regression asset, so any change that affects BLE contract, scenarios, headless mode, or fault injection should be validated against the simulator path as well as the app path.
 
 ## Architecture (Fundamental Concepts)
 
@@ -56,6 +62,15 @@ The macOS simulator is not a throwaway stub — it's designed as a **persistent 
 
 All reusable logic lives in SPM targets under a single root `Package.swift`. The two executable apps (iOS app, macOS simulator) are thin Xcode project shells that only handle entry points, permissions (`Info.plist`), and composition root wiring. See `docs/08-project-structure.md`.
 
+### Persistence Strategy: Replaceable Storage Boundary
+
+Structured persistence currently targets **SwiftData**, while waveform/raw large blobs live in files. This is an implementation choice, **not** an architectural dependency. See `docs/specs/0004-local-storage.spec.md`.
+
+Rules:
+- `HRSenseCore` owns the `PersistenceStore` abstraction and domain entities; upper layers must not depend on `SwiftData` types such as `@Model`, `ModelContext`, or framework-specific query DSL.
+- `HRSenseData` may implement `SwiftDataStore` now, but the boundary must remain compatible with a future `GRDBStore` / SQLite migration if real-world data volume, query complexity, or aggregation requirements demand it.
+- `WaveformFileStore` and waveform binary formats must remain decoupled from the structured database choice so that replacing `SwiftData` does not force waveform-format redesign.
+
 ### Key Frozen Design Decisions (v1)
 
 These are considered decided; do not reopen without a strong reason:
@@ -79,6 +94,16 @@ The protocol document (`docs/03-ble-gatt-protocol.md`) is the single source of t
 4. Add or update golden-value tests for any new or changed byte formats.
 
 The doc explicitly states: "本文档是 App 与设备/模拟器之间的**契约**。任何改动应先改此文档与 `HRSenseProtocol` 包，再改两端实现。"
+
+### Protobuf Boundary (Optional, L4 Only)
+
+The project default remains the custom TLV-based payload design in `docs/03-ble-gatt-protocol.md`. If Protobuf is introduced later, it belongs **only** to the **L4 application payload encoding** boundary — not to GATT, not to L2 framing/reliability, not to UI, and not to persistence. See `docs/03-ble-gatt-protocol.md` §6.4 and `docs/08-project-structure.md`.
+
+Rules:
+- Keep BLE GATT transport and L2 framing/CRC/seq behavior unchanged; Protobuf only replaces the L4 payload representation.
+- Store shared `.proto` schemas under the repo-root `proto/` directory.
+- Treat `.proto` as a cross-platform schema contract shared by **iOS / Android / firmware**, with each platform generating and consuming its own language bindings.
+- `HRSenseProtocol` remains the entry point for protocol-layer encode/decode orchestration even if the L4 payload switches from TLV to Protobuf.
 
 ### Definition of Done (per `docs/11-delivery-plan.md` §0)
 
