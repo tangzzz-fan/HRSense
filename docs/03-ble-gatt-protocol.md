@@ -1,7 +1,7 @@
-# 03 · 自定义协议栈与 GATT Profile（v1 草案）
+# 03 · 自定义协议栈与 GATT Profile（v1 冻结）
 
 > 本文档是 App 与设备/模拟器之间的**契约**。任何改动应先改此文档与 `HRSenseProtocol` 包，再改两端实现。
-> 以下 UUID、字段、opcode 均为**待冻结草案**，落地前需 review 确认。
+> 以下 UUID、字段、opcode 均已**冻结**。以下定义即为 v1 实现契约。
 
 ## 1. 为什么要"自定义协议栈"
 
@@ -69,7 +69,7 @@
   FragHdr  seq      分片数据
 ```
 
-`FragHdr`（1 字节）位定义（草案）：
+`FragHdr`（1 字节）位定义（v1 冻结）：
 
 | 位 | 名称 | 含义 |
 | --- | --- | --- |
@@ -144,10 +144,10 @@ for b in bytes(Ver..Body):
 ```
 
 - `OpCode`（1B）：命令码。
-- `Flags`（1B）：req/resp 标志位、是否需要 ACK 等（草案）。
+- `Flags`（1B）：bit7=req/resp（0=请求, 1=响应），bit6=需要ACK，bit5..0=保留（置0）。
 - `TLV Params`：`Tag(1B) Len(1B) Value(Len)` 序列。
 
-### 5.2 命令表（v1 草案）
+### 5.2 命令表（v1）
 
 | OpCode | 名称 | 方向 | 说明 |
 | --- | --- | --- | --- |
@@ -209,7 +209,7 @@ Dev → App: HELLO_ACK { protoVersion:1, capabilities, model, fw }
 - `DataKind`（1B）：数据大类。取值：`0x01` 心率/RR 样本、`0x02` **波形块**（高吞吐，见 [spec 0003](specs/0003-waveform-high-throughput.spec.md)）、`0x03` 设备状态、`0x04` 批量样本。
 - TLV Records：字段以 `Tag/Len/Value` 表达，向前兼容（未知 Tag 跳过）。
 
-### 6.2 字段字典（v1 草案）
+### 6.2 字段字典（v1）
 
 | Tag | 字段 | 类型 | 单位 / 说明 |
 | --- | --- | --- | --- |
@@ -268,7 +268,7 @@ sequenceDiagram
 
 ## 8. 冻结状态与待办
 
-### v1 已定（本次冻结）
+### v1 冻结项
 - [x] Service / Characteristic 的 128-bit UUID（见 3.1，含 OTA Data 0005）。
 - [x] CRC16 算法：CRC-16/CCITT-FALSE（见 4.2.1）。
 - [x] `capabilities` 位图定义（见 5.3.1，含 bit9 OTA_DFU）。
@@ -279,7 +279,7 @@ sequenceDiagram
 
 > 说明：以上为**模拟用途**下采用的常见做法，已固化以保证端到端流程可跑通。
 
-### 仍待定（拿到真机后校订）
+### 真机校订（拿到真机后）
 - [ ] 与真实硬件协议的字段/字节序/时序对齐（本 v1 已自洽，真机到位后按其规格校订，差异经能力协商吸收）。
 
 ## 9. `HRSenseProtocol` 共享包：一份编解码，两端共用
@@ -318,7 +318,7 @@ graph LR
     DEC -->|命令| SIM
 ```
 
-### 9.3 对外接口（示意，非最终）
+### 9.3 对外接口（v1 接口规划）
 
 ```swift
 // 编码：业务模型 -> GATT 分片序列（按 MTU 分片；两端方向不同但同一实现）
@@ -339,4 +339,4 @@ enum DecodedFrame {
 ```
 
 > 相关落点：README 核心决策 #2、`02-architecture.md` §1（对称性）与组件表、`05-simulator-macos.md`（模拟器接入同一包）。
-> 注：以上为接口草案，用于说明分层边界；真正签名在实现阶段确定。
+> 注：以上为 v1 接口规划，用于说明分层边界；真正签名在实现阶段确定。

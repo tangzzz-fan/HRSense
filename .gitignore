@@ -1,7 +1,7 @@
 # macOS
 .DS_Store
 
-# Xcode / SwiftPM (为后续代码阶段预置)
+# Xcode / SwiftPM (for future code phases)
 build/
 DerivedData/
 *.xcuserstate
@@ -9,9 +9,26 @@ xcuserdata/
 .swiftpm/
 .build/
 Packages/*/.build/
-
-# CoreML 大文件（如需，改用 LFS 或外部存储）
-# *.mlmodel
-# *.mlpackage
-
 */.build/
+
+# SPM artifacts
+.build/*
+*.xcodeproj/xcuserdata
+*.xcworkspace/xcuserdata
+
+# Scenario output directory (simulator headless runs)
+ScenarioOutput/
+
+# Python virtual env (tools/)
+tools/venv/
+tools/__pycache__/
+*.pyc
+
+# Git LFS pointer files (tracked via .gitattributes)
+# *.bin  (managed by LFS, not gitignored)
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~

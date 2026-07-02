@@ -1,0 +1,7 @@
+*.mlpackage filter=lfs diff=lfs merge=lfs -text
+*.mlmodel filter=lfs diff=lfs merge=lfs -text
+*.bin filter=lfs diff=lfs merge=lfs -text
+*.swift text eol=lf
+*.c text eol=lf
+*.cpp text eol=lf
+*.h text eol=lf

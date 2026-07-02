@@ -1,0 +1,4 @@
+module HRSenseComputeCxx {
+    header "hrs_compute.h"
+    export *
+}
