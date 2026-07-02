@@ -1,0 +1,12 @@
+{
+  "name": "Fault injection — 5% drop, CRC corruption",
+  "description": "Stream with injected faults to verify App resilience.",
+  "steps": [
+    {"action": "injectFault", "delayMs": 0, "heartRate": null, "fault": {"dropProbability": 0.05, "corruptCRCProbability": 0.02, "latencyMs": null}},
+    {"action": "startStream", "delayMs": 500, "heartRate": null, "fault": null},
+    {"action": "wait", "delayMs": 30000, "heartRate": null, "fault": null},
+    {"action": "injectFault", "delayMs": 0, "heartRate": null, "fault": {"dropProbability": 0.0, "corruptCRCProbability": 0.0, "latencyMs": null}},
+    {"action": "wait", "delayMs": 10000, "heartRate": null, "fault": null},
+    {"action": "stopStream", "delayMs": 0, "heartRate": null, "fault": null}
+  ]
+}

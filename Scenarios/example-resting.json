@@ -1,0 +1,9 @@
+{
+  "name": "Resting HR — 60s stream",
+  "description": "Connect, stream 60s of resting HR, then stop.",
+  "steps": [
+    {"action": "startStream", "delayMs": 500, "heartRate": null, "fault": null},
+    {"action": "wait", "delayMs": 60000, "heartRate": null, "fault": null},
+    {"action": "stopStream", "delayMs": 0, "heartRate": null, "fault": null}
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "name": "Exercise — warmup, peak, recovery",
+  "description": "Simulate an exercise session with HR ramp up, peak, and recovery.",
+  "steps": [
+    {"action": "setHR", "delayMs": 0, "heartRate": 65, "fault": null},
+    {"action": "startStream", "delayMs": 500, "heartRate": null, "fault": null},
+    {"action": "wait", "delayMs": 10000, "heartRate": null, "fault": null},
+    {"action": "setHR", "delayMs": 0, "heartRate": 90, "fault": null},
+    {"action": "wait", "delayMs": 20000, "heartRate": null, "fault": null},
+    {"action": "setHR", "delayMs": 0, "heartRate": 130, "fault": null},
+    {"action": "wait", "delayMs": 30000, "heartRate": null, "fault": null},
+    {"action": "setHR", "delayMs": 0, "heartRate": 150, "fault": null},
+    {"action": "wait", "delayMs": 30000, "heartRate": null, "fault": null},
+    {"action": "setHR", "delayMs": 0, "heartRate": 110, "fault": null},
+    {"action": "wait", "delayMs": 20000, "heartRate": null, "fault": null},
+    {"action": "setHR", "delayMs": 0, "heartRate": 70, "fault": null},
+    {"action": "wait", "delayMs": 10000, "heartRate": null, "fault": null},
+    {"action": "stopStream", "delayMs": 0, "heartRate": null, "fault": null}
+  ]
+}
