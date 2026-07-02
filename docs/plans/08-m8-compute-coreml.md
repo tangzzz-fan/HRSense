@@ -136,10 +136,20 @@ HRSenseCompute ← 唯一需要改的模块
 
 ## 阶段 7：Redux Middleware
 
+为保持链路闭环，M8 需要在 `Action` 中显式表达“特征已提取”这一中间结果，不能让 `FeatureVector` 只停留在 Repository/Service 层。
+
 | 文件 | 职责 |
 |---|---|
-| `ComputeMiddleware.swift` | 5 分钟滑动窗口积累 RR → 触发 `computeHRV` → dispatch `hrvComputed` |
-| `InferenceMiddleware.swift` | 收到 `hrvComputed` → 触发 `runInference` → dispatch `inferenceCompleted` |
+| `ComputeMiddleware.swift` | 5 分钟滑动窗口积累 RR → 触发 `computeHRV` 与 `extractFeatures` → dispatch `hrvComputed` + `featuresExtracted` |
+| `InferenceMiddleware.swift` | 收到 `featuresExtracted(FeatureVector)` → 触发 `runInference` → dispatch `inferenceCompleted` |
+
+建议把 M4 的 `Action` 扩展为：
+
+```swift
+case hrvComputed(HRVMetrics)
+case featuresExtracted(FeatureVector)
+case inferenceCompleted(InferenceResult)
+```
 
 ---
 

@@ -125,14 +125,14 @@ enum OTAPhase: Equatable {
     case applying
     case rebootingAndReconnecting
     case completed(newVersion: String)
-    case failed(OTAError)
+    case failed(AppError) // use AppError.otaFailed(phase:) as the single error entry
 }
 ```
 
 ## 8. 里程碑落点
 
-- 归入 `01-roadmap.md` 的 **M6（健壮性/故障注入）之后**，作为独立 OTA 小里程碑；依赖协议(M1)与连接/命令闭环(M3)。
-- 真机迁移(M7)时，仅需让真机 bootloader/DFU 语义对齐本协议的 START/WINDOW/VALIDATE/APPLY 流程（差异走能力位声明）。
+- 对应 `01-roadmap.md` / `11-delivery-plan.md` 的 **M6（OTA / DFU 升级全流程）**；依赖协议(M1)、连接/命令闭环(M3) 与 Redux 展示层(M4)。
+- 真机迁移(M12)时，仅需让真机 bootloader/DFU 语义对齐本协议的 START/WINDOW/VALIDATE/APPLY 流程（差异走能力位声明）。
 
 ## 9. 状态：本设计已固化（仅模拟用途）
 

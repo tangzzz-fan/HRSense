@@ -6,7 +6,7 @@ M6 实现端到端固件升级全流程。建立在 M3（BLE 集成）之上。
 
 **核心设计文档**：`docs/07-ota-dfu.md` —— 定义了完整的 OTA 协议、命令表、设备状态机、传输时序、安全约束以及 App 状态模型。
 
-**硬依赖**：M3 必须完成。M6 需要 `HRSenseProtocol` 包、`BLECentralDataSource`、`DeviceRepository` 及连接状态机。
+**硬依赖**：M4 必须完成。M6 建立在 M3 的连接/命令闭环之上，同时直接依赖 M4 已落地的 `HRSenseFeature`、Store、Action、Reducer 与 Middleware 基础设施。
 
 ---
 
@@ -59,11 +59,12 @@ M6 实现端到端固件升级全流程。建立在 M3（BLE 集成）之上。
 
 | 文件 | 职责 |
 |---|---|
-| `Sources/HRSenseCore/Entities/OTAUpdateError.swift` | 领域错误枚举 |
 | `Sources/HRSenseCore/Entities/OTAProgress.swift` | 阶段枚举 + 进度 (0.0...1.0) |
 | `Sources/HRSenseCore/Entities/OTAFirmwareImage.swift` | 固件镜像值类型 |
 | `Sources/HRSenseCore/Repositories/OTARepository.swift` | 协议：`startOTA`、`abortOTA`、`cancelOTA` |
 | `Sources/HRSenseCore/UseCases/OTAUpdateUseCase.swift` | 编排整个 OTA 流程 |
+
+**错误模型约束**：OTA 失败统一回收到 `AppError.otaFailed(phase:)`，必要的底层细节以日志字段和诊断 payload 附带，不新增平行错误体系。
 
 ---
 
@@ -94,7 +95,7 @@ M6 实现端到端固件升级全流程。建立在 M3（BLE 集成）之上。
 enum OTAPhase: Equatable {
     case idle, preparing, transferring(progress: Double)
     case validating, applying, rebootingAndReconnecting
-    case completed(newVersion: String), failed(error: OTAUpdateError)
+    case completed(newVersion: String), failed(error: AppError)
 }
 ```
 
@@ -111,7 +112,9 @@ enum OTAPhase: Equatable {
 | `OTASuccessView.swift` | 成功动画 + 版本确认 |
 | `OTAVersionCompareView.swift` | 版本对比 |
 
-**UI 规则**：进度条必须单调递增、升级期间禁止退出导航、后台继续传输、VoiceOver 无障碍。
+**UI 规则**：进度条必须单调递增、升级期间禁止退出导航、仅支持前台 OTA、VoiceOver 无障碍。
+
+**后台边界**：后台 BLE 恢复与降级策略归 M10 处理；M6 只定义前台升级闭环，不在本里程碑承诺后台持续传输。
 
 ---
 

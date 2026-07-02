@@ -4,7 +4,7 @@
 
 实现完整波形通道——从模拟器端合成 ECG/PPG，通过 BLE Notify 高吞吐传输，到 App 端 Canvas 高性能渲染。跨越三个模块：`HRSenseProtocol`（波形编解码器）、`HRSenseSimulatorKit`（波形生成器）、`HRSenseData`+`HRSenseFeature`（环形缓冲区+渲染）。
 
-**硬依赖**：M3（BLE 集成）。
+**硬依赖**：M4（Redux 展示层，且建立在 M3 BLE 集成之上）。
 
 ---
 
@@ -75,6 +75,8 @@ public struct WaveformBlock {
 ---
 
 ## 阶段 5：HRSenseFeature — Canvas 渲染视图（核心 UI）
+
+此阶段直接落地 `HRSenseFeature` 的 Redux 状态与视图，因此必须在 M4 完成后开展，避免在展示层骨架未稳定时提前分叉状态模型。
 
 | 文件 | 职责 |
 |---|---|

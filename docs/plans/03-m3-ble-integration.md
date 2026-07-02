@@ -18,7 +18,7 @@ iOS App 连接模拟器、发现服务、订阅并正确解码数据，端到端
 | `RRInterval.swift` | `timestamp: Date`、`intervalMs: Int` |
 | `DeviceInfo.swift` | `peripheralIdentifier`、`name`、`model`、`firmwareVersion`、`protocolVersion`、`capabilities` |
 | `Capabilities.swift` | `OptionSet`、`rawValue: UInt32`、bit0–bit10 静态常量 |
-| `ConnectionState.swift` | 枚举：`idle`/`scanning`/`connecting`/`handshaking`/`connected`/`disconnecting`/`disconnected` |
+| `ConnectionState.swift` | 连接状态根枚举：M3 基线为 `idle`/`scanning`/`connecting`/`handshaking`/`connected`/`disconnecting`/`disconnected`；M10 在同一文件中增量扩展恢复态 |
 | `AppError.swift` | 规范错误枚举（见 `docs/04` §8.5） |
 | `DeviceEvent.swift` | `batteryLevelChanged`/`sensorContactChanged`/`error` |
 | `StubTypes.swift` | M5/M8 占位类型（`HRVMetrics`、`InferenceResult`、`OTAPhase`） |

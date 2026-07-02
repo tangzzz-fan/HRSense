@@ -4,6 +4,8 @@
 
 实现 iOS 后台 BLE 运行与 CoreBluetooth 状态恢复（State Preservation & Restoration）。当 App 被系统杀死后，蓝牙事件可唤醒 App 并恢复连接/订阅。
 
+**回溯修改说明**：M10 会扩展 M3 定义的 `ConnectionState` 与 M4 定义的 `Action` / `AppState`。这些类型的所有权仍保留在原文件中，本里程碑以增量方式回写，不另起平行状态体系。
+
 **依赖**：M4（Redux 展示层）。
 
 ---
@@ -76,6 +78,8 @@ enum AppLifecycleState: Equatable {
 
 ## 阶段 5：生命周期 Action + Reducer
 
+本阶段直接修改 M3 / M4 既有基础类型，而不是创建新的旁路状态。
+
 | Action | State 变更 |
 |---|---|
 | `didEnterBackground` | `lifecycle = .background` |
@@ -108,6 +112,8 @@ case restored              // 连接恢复，验证中
 case restoredValidating    // 重握手中
 case restoredConnected     // 完全恢复
 ```
+
+这些状态追加到 `Sources/HRSenseCore/Entities/ConnectionState.swift`，保持 M3 与 M10 共用同一个连接状态枚举。
 
 ---
 

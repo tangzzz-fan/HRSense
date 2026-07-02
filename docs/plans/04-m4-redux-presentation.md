@@ -46,6 +46,8 @@ public enum AppError: Equatable {
 
 ### Action（`Sources/HRSenseFeature/Actions/Action.swift`）
 
+`Action` 作为全局根枚举在此集中维护；后续 M8（特征提取/推理）与 M10（生命周期/恢复）只允许在同一根枚举上增量扩展，不新增旁路 action 体系。
+
 ```swift
 public enum Action {
     case startScanning, stopScanning
