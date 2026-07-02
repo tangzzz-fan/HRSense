@@ -30,18 +30,35 @@ graph LR
 - 计算密集、需精确控制性能与内存。
 - 便于未来复用到其他平台 / 与硬件侧算法共享。
 
-### 2.3 集成方式（已定：C ABI 方案）
+### 2.3 集成方式（已定：C ABI + 预留 Swift/C++ 直接互操作迁移路径）
 
-**决策**：采用 **C ABI 方案**——C++ 内部实现，**对外仅暴露一层纯 C 接口**（`extern "C"`），Swift 通过桥接头（bridging header / module map）调用；C++ 代码以 **SwiftPM target** 形式打包管理。
+**决策**：v1 采用 **C ABI 方案**——C++ 内部实现，**对外仅暴露一层纯 C 接口**（`extern "C"`），Swift 通过桥接头（bridging header / module map）调用；C++ 代码以 **SwiftPM target** 形式打包管理。
 
 | 方案 | 说明 | 结论 |
 | --- | --- | --- |
-| **A. C ABI（选用）** | C++ 暴露纯 C 接口，Swift 经桥接调用 | ✅ 最稳妥、边界清晰、可控 |
-| B. Swift/C++ 互操作 | Swift 5.9+ 直接与 C++ 互操作 | ❌ 较新，成熟度/坑需评估，暂不用 |
+| **A. C ABI（v1 选用）** | C++ 暴露纯 C 接口，Swift 经桥接调用 | ✅ 最稳妥、边界清晰、可控 |
+| B. Swift/C++ 互操作 | Swift 5.9+ 直接与 C++ 互操作 | 🔄 v1 不采用，但**架构已预留迁移路径**（见下方） |
 | C. SwiftPM 打包 | 打包方式（与桥接机制正交）| ➕ 作为 A 的打包手段并用 |
 
-> **边界原则**：Swift 侧只看到"输入样本 → 输出指标/特征"的**窄 C 接口**（POD/值类型进出，避免 C++ 类型跨界），不泄露 C++ 细节；便于替换、单测与稳定 ABI。
-> 具体接口签名、内存所有权、线程约定在 [`specs/0001`](specs/0001-cpp-compute-integration.spec.md) 定稿。
+#### 迁移路径：C ABI → Swift/C++ 直接互操作（最小成本）
+
+**关键设计**：`ComputeBridge.swift` 是整个系统中**唯一**直接依赖 C ABI 的文件（~50 行）。C++ 内部实现（`hrv.cpp`/`dsp.cpp`）的接口语义（POD 值类型进出、caller 分配输出缓冲、int 状态码）与 Swift/C++ 互操作完全兼容。迁移只改 2 个文件，C++ 实现逻辑不碰一行：
+
+| 改动的文件 | 变更 |
+|---|---|
+| `ComputeBridge.swift` | 从 `import HRSenseComputeCxx`（module map）改为 `import hrs_compute.h`（C++ header 直接 import，`-cxx-interoperability-mode=default`） |
+| `hrs_compute.h` | 去掉 `extern "C"` 包裹，函数签名不变 |
+| `module.modulemap` | 删除（不再需要） |
+| `Package.swift` | target settings 加 `-cxx-interoperability-mode=default` |
+
+**不受影响的文件**（全部通过 `ComputeRepository` 协议隔离）：
+- `HRSenseCore/` — 所有 Entity、Repository 协议
+- `HRSenseData/Repositories/ComputeRepositoryImpl.swift` — 调 `ComputeBridge`，公开 API 不变
+- `HRSenseFeature/Middleware/ComputeMiddleware.swift` — 通过协议消费
+- 所有单元测试 — `ComputeBridge` 公开 API 签名不变，黄金值测试自动复用
+- `hrv.cpp`、`dsp.cpp` — C++ 实现不感知互操作方式
+
+> **边界原则**：无论是 C ABI 还是 Swift/C++ 直接互操作，Swift 侧始终只看到"输入样本 → 输出指标/特征"的**窄接口**（POD/值类型进出，避免 C++ 类型跨界），不泄露 C++ 细节。这就是为什么迁移成本极低——两种方案共享同一个接口契约。具体接口签名、内存所有权、线程约定在 [`specs/0001`](specs/0001-cpp-compute-integration.spec.md) 定稿。
 
 ### 2.4 建议接口形态（示意）
 ```

@@ -68,7 +68,7 @@ module HRSenseComputeCxx { header "hrs_compute.h" export * }
 
 ---
 
-## 阶段 5：Swift ComputeBridge
+## 阶段 5：Swift ComputeBridge（关键适配层）
 
 `Sources/HRSenseCompute/ComputeBridge.swift`：
 ```swift
@@ -78,7 +78,49 @@ public struct ComputeBridge: Sendable {
 }
 ```
 
+**ComputeBridge 是整个系统中唯一直接依赖 C ABI 的文件。** 这是故意的——把 C 互操作的边界压缩到一个薄适配层（~50 行），上层代码全部通过 `ComputeRepository` 协议消费。
+
 边界测试：空输入、单 RR、恰好 2 个、大数组。
+
+### 设计理由与 Swift/C++ 直接互操作迁移路径
+
+**当前选择 C ABI（`extern "C"` + module map）而非 Swift 5.9+ C++ 直接互操作的原因**：
+- Swift 5.9 的 C++ 互操作是首次引入，工具链成熟度/编译速度/跨版本兼容性仍需观察
+- C ABI 边界由调用方分配内存、值类型进出，不泄露 C++ 类型——这个原则无论用哪种方案都成立
+- 项目当前基线 iOS 17，Swift 5.9 刚好够；但团队经验、CI 工具链、SwiftPM 对 C++ 互操作的支持都需额外验证
+
+**到 Swift/C++ 直接互操作的最小迁移面（只改 2 个文件）**：
+
+```
+HRSenseCore (Domain)
+    ↑ ComputeRepository 协议（不变）
+HRSenseData
+    ↑ ComputeRepositoryImpl（不变——调的是 ComputeBridge 的 Swift 接口）
+HRSenseCompute ← 唯一需要改的模块
+    ├── ComputeBridge.swift        ← 【改】重写实现，import HRSenseComputeCxx 改为直接 import C++ 类型
+    └── HRSenseComputeCxx/
+        ├── include/hrs_compute.h  ← 【改】去掉 extern "C"，暴露 C++ 函数签名（或直接 import C++ header）
+        ├── include/module.modulemap ← 【删】不再需要 module map
+        ├── hrv.cpp                ← 不变
+        └── dsp.cpp                ← 不变
+```
+
+**迁移步骤（预估 <2 小时）**：
+
+1. **删除 `module.modulemap`**，Swift 5.9+ 通过 `-cxx-interoperability-mode` 直接 import C++ header
+2. **改写 `hrs_compute.h`**：去掉 `extern "C"`，函数签名不变，C++ 类型（如 `std::vector` / `std::span`）可作为可选增强
+3. **改写 `ComputeBridge.swift`**：把 `hrs_compute_hrv(rr_ms, count, &out)` 替换为直接调用 C++ 函数，Swift 自动桥接 `[UInt16]` → `std::span<const uint16_t>`
+4. **更新 `Package.swift`**：`cxxSettings` 添加 `-cxx-interoperability-mode=default`，swiftSettings 添加 `-cxx-interoperability-mode=default`
+
+**不做任何改动的文件**（全部受保护）：
+- `HRSenseCore/Entities/HRVMetrics.swift`、`FeatureVector.swift`
+- `HRSenseCore/Repositories/ComputeRepository.swift`（协议不变）
+- `HRSenseData/Repositories/ComputeRepositoryImpl.swift`（调 ComputeBridge，接口不变）
+- `HRSenseFeature/Middleware/ComputeMiddleware.swift`（通过协议消费，无感知）
+- 所有单元测试（`ComputeBridge` 的公开 API 签名不变，黄金值测试直接复用）
+- `hrv.cpp`、`dsp.cpp`（C++ 内部实现不受互操作方式影响）
+
+**关键设计原则**：C++ 实现不感知互操作方式。`hrs_compute_*` 函数签名的语义（输入 POD 类型数组指针 + 输出 caller-allocated 结构体指针 + 返回 int 状态码）在两种方案下完全一致。迁移只是把 `extern "C"` 关键字去掉、把 Swift 侧的调用语法从 C 函数改为 C++ 函数——中间的计算逻辑不动一行。
 
 ---
 

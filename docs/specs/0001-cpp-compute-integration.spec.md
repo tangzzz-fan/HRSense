@@ -44,9 +44,10 @@ int hrs_extract_features(const double* window, size_t count,
 ```
 
 ## 4. 备选方案与取舍
-- **Swift/C++ 互操作（未采用）**：能减少桥接样板，但工具链成熟度/边界坑较多，暂不用。
+- **Swift/C++ 互操作（v1 未采用，架构已预留迁移路径）**：能减少桥接样板，但工具链成熟度/边界坑较多，v1 暂不用。但当前架构已为此预留了最小迁移面：**唯一**依赖 C ABI 的文件是 `ComputeBridge.swift`（~50 行），其余全部通过 `ComputeRepository` 协议隔离。迁移时只需改 `ComputeBridge.swift` + `hrs_compute.h`（去掉 `extern "C"`）+ 删 `module.modulemap` + `Package.swift` 加 `-cxx-interoperability-mode=default`，共 2-3 个文件、估计 <2 小时。C++ 内部实现（`hrv.cpp`/`dsp.cpp`）和所有上层代码完全不受影响。详见 `06` §2.3 迁移路径。
 - **Objective-C++ 包装（可作补充）**：如需传递复杂对象，可在 C 接口之上再加薄 Obj-C++ 层，但优先保持纯 C 边界以稳定 ABI。
 - 选 **C ABI** 的核心理由：边界清晰、ABI 稳定、易单测、C++ 细节不外泄、便于未来替换实现。
+- **C ABI 与 Swift/C++ 直接互操作的共同前提**：两者共享完全相同的接口契约——POD 值类型进出、caller 分配输出缓冲、int 状态码、无状态/可重入。这个契约设计保证了两种方案之间的切换是纯语法层面的（去掉 `extern "C"`），不涉及语义变更。
 
 ## 5. 影响面
 - App：新增计算桥模块 + `ComputeRepositoryImpl`。
