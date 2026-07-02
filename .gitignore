@@ -1,0 +1,17 @@
+# macOS
+.DS_Store
+
+# Xcode / SwiftPM (为后续代码阶段预置)
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+.swiftpm/
+.build/
+Packages/*/.build/
+
+# CoreML 大文件（如需，改用 LFS 或外部存储）
+# *.mlmodel
+# *.mlpackage
+
+*/.build/
