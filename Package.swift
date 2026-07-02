@@ -9,12 +9,11 @@ let package = Package(
         .library(name: "HRSenseCore",         targets: ["HRSenseCore"]),
         .library(name: "HRSenseCompute",      targets: ["HRSenseCompute"]),
         .library(name: "HRSenseData",         targets: ["HRSenseData"]),
+        .library(name: "HRSenseFeature",      targets: ["HRSenseFeature"]),
         .library(name: "HRSenseSimulatorKit", targets: ["HRSenseSimulatorKit"]),
-        // HRSenseFeature — deferred to M4 (TGReduxKit uses iOS-only fullScreenCover,
-        // incompatible with macOS builds; will resolve in M4 when Redux layer is implemented).
     ],
     dependencies: [
-        // TGReduxKit integration deferred to M4.
+        .package(url: "https://github.com/tangzzz-fan/TGReduxKit.git", from: "2.0.0"),
     ],
     targets: [
         .target(name: "HRSenseProtocol"),
@@ -26,13 +25,14 @@ let package = Package(
                 dependencies: ["HRSenseComputeCxx"]),
         .target(name: "HRSenseData",
                 dependencies: ["HRSenseProtocol", "HRSenseCore", "HRSenseCompute"]),
-        // HRSenseFeature target deferred to M4 (see above).
+        .target(name: "HRSenseFeature",
+                dependencies: ["HRSenseCore", .product(name: "TGReduxKit", package: "TGReduxKit")]),
         .target(name: "HRSenseSimulatorKit",
                 dependencies: ["HRSenseProtocol"]),
         .testTarget(name: "HRSenseProtocolTests", dependencies: ["HRSenseProtocol"]),
         .testTarget(name: "HRSenseComputeTests", dependencies: ["HRSenseCompute"]),
         .testTarget(name: "HRSenseDataTests", dependencies: ["HRSenseData"]),
-        // HRSenseFeatureTests deferred to M4.
+        .testTarget(name: "HRSenseFeatureTests", dependencies: ["HRSenseFeature"]),
         .testTarget(name: "HRSenseSimulatorKitTests", dependencies: ["HRSenseSimulatorKit"]),
     ]
 )
