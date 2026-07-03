@@ -82,6 +82,12 @@ final class ReducerTests: XCTestCase {
 
     // MARK: - Compute / Inference
 
+    func test_computeStarted_setsMetricsRunning() {
+        var state = AppState()
+        AppReducer.reduce(state: &state, action: .computeStarted)
+        XCTAssertEqual(state.metrics.computationStatus, .computing)
+    }
+
     func test_hrvComputed_updatesMetrics() {
         var state = AppState()
         let metrics = HRVMetrics(sdnn: 50, rmssd: 30)
@@ -90,12 +96,25 @@ final class ReducerTests: XCTestCase {
         XCTAssertEqual(state.metrics.computationStatus, .ready)
     }
 
+    func test_inferenceStarted_setsRunning() {
+        var state = AppState()
+        AppReducer.reduce(state: &state, action: .inferenceStarted)
+        XCTAssertEqual(state.inference.status, .running)
+    }
+
     func test_inferenceCompleted_updatesState() {
         var state = AppState()
         let result = InferenceResult(label: "Stress", probabilities: ["Stress": 0.85], modelVersion: "1.0")
         AppReducer.reduce(state: &state, action: .inferenceCompleted(result))
         XCTAssertEqual(state.inference.latestResult, result)
         XCTAssertEqual(state.inference.status, .completed)
+    }
+
+    func test_featuresExtracted_updatesLatestFeatures() {
+        var state = AppState()
+        let fv = FeatureVector(values: Array(repeating: 1, count: FeatureVector.dim))
+        AppReducer.reduce(state: &state, action: .featuresExtracted(fv))
+        XCTAssertEqual(state.inference.latestFeatures, fv)
     }
 
     // MARK: - Error
@@ -116,6 +135,18 @@ final class ReducerTests: XCTestCase {
         var state = AppState(connection: .connected)
         AppReducer.reduce(state: &state, action: .errorOccurred(.decodeError))
         XCTAssertEqual(state.connection, .connected)
+    }
+
+    func test_errorOccurred_computeFailed_resetsMetricsStatus() {
+        var state = AppState(metrics: MetricsState(computationStatus: .computing))
+        AppReducer.reduce(state: &state, action: .errorOccurred(.computeFailed))
+        XCTAssertEqual(state.metrics.computationStatus, .idle)
+    }
+
+    func test_errorOccurred_inferenceFailed_resetsInferenceStatus() {
+        var state = AppState(inference: InferenceState(status: .running))
+        AppReducer.reduce(state: &state, action: .errorOccurred(.inferenceFailed))
+        XCTAssertEqual(state.inference.status, .idle)
     }
 
     func test_dismissError_nilsError() {
@@ -169,11 +200,11 @@ final class ReducerTests: XCTestCase {
 
     // MARK: - Feature vector
 
-    func test_featuresExtracted_isNoOp() {
+    func test_featuresExtracted_keepsConnectionStateUnchanged() {
         var state = AppState()
         let fv = FeatureVector(values: Array(repeating: 0, count: 14))
         AppReducer.reduce(state: &state, action: .featuresExtracted(fv))
-        // State unchanged — featuresExtracted is a signalling action
         XCTAssertEqual(state.connection, .idle)
+        XCTAssertEqual(state.inference.latestFeatures, fv)
     }
 }

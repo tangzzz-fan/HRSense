@@ -8,14 +8,13 @@ final class ComputeMiddlewareTests: XCTestCase {
 
     func makeStore(
         computeRepo: FakeComputeRepository,
-        inferenceRepo: FakeInferenceRepository,
         window: TimeInterval = 300,
         step: TimeInterval = 0.1
     ) -> Store<AppState, Action> {
         Store(
             initialState: AppState(),
             reducer: AppReducer.reduce,
-            middlewares: [makeComputeMiddleware(computeRepo: computeRepo, inferenceRepo: inferenceRepo, windowDuration: window, stepInterval: step)]
+            middlewares: [makeComputeMiddleware(computeRepo: computeRepo, windowDuration: window, stepInterval: step)]
         )
     }
 
@@ -23,8 +22,7 @@ final class ComputeMiddlewareTests: XCTestCase {
 
     func test_rrAccumulation_triggersCompute() async {
         let computeRepo = FakeComputeRepository()
-        let inferenceRepo = FakeInferenceRepository()
-        let store = makeStore(computeRepo: computeRepo, inferenceRepo: inferenceRepo)
+        let store = makeStore(computeRepo: computeRepo)
         let samples = [
             HeartRateSample(timestamp: Date(), heartRate: 72, rrIntervals: [800, 820]),
             HeartRateSample(timestamp: Date(), heartRate: 73, rrIntervals: [790, 810]),
@@ -34,27 +32,26 @@ final class ComputeMiddlewareTests: XCTestCase {
         XCTAssertEqual(computeRepo.computeCallCount, 1)
     }
 
-    func test_computeTriggersInference() async {
+    func test_computeDispatchesFeaturesExtracted() async {
         let computeRepo = FakeComputeRepository()
-        let inferenceRepo = FakeInferenceRepository()
-        let store = makeStore(computeRepo: computeRepo, inferenceRepo: inferenceRepo)
+        let store = makeStore(computeRepo: computeRepo)
         let samples = [
             HeartRateSample(timestamp: Date(), heartRate: 72, rrIntervals: [800, 820]),
             HeartRateSample(timestamp: Date(), heartRate: 73, rrIntervals: [790, 810]),
         ]
         store.dispatch(.heartRateReceived(samples))
         try? await Task.sleep(nanoseconds: 400_000_000)
-        XCTAssertEqual(inferenceRepo.inferenceCallCount, 1)
         XCTAssertEqual(store.state.metrics.computationStatus, .ready)
         XCTAssertNotNil(store.state.metrics.latestHRV)
+        XCTAssertNotNil(store.state.inference.latestFeatures)
+        XCTAssertEqual(store.state.inference.latestFeatures?.values.count, FeatureVector.dim)
     }
 
     // MARK: - Clear samples
 
     func test_clearSamples_resetsBuffer() async {
         let computeRepo = FakeComputeRepository()
-        let inferenceRepo = FakeInferenceRepository()
-        let store = makeStore(computeRepo: computeRepo, inferenceRepo: inferenceRepo)
+        let store = makeStore(computeRepo: computeRepo)
         let samples = [HeartRateSample(timestamp: Date(), heartRate: 72, rrIntervals: [800, 820])]
         store.dispatch(.heartRateReceived(samples))
         store.dispatch(.clearSamples)
@@ -69,8 +66,7 @@ final class ComputeMiddlewareTests: XCTestCase {
     func test_computeError_dispatchesError() async {
         let computeRepo = FakeComputeRepository()
         computeRepo.shouldThrow = true
-        let inferenceRepo = FakeInferenceRepository()
-        let store = makeStore(computeRepo: computeRepo, inferenceRepo: inferenceRepo)
+        let store = makeStore(computeRepo: computeRepo)
         let samples = [
             HeartRateSample(timestamp: Date(), heartRate: 72, rrIntervals: [800, 820]),
             HeartRateSample(timestamp: Date(), heartRate: 73, rrIntervals: [790, 810]),
@@ -84,11 +80,10 @@ final class ComputeMiddlewareTests: XCTestCase {
 
     func test_stepInterval_preventsRecompute() async {
         let computeRepo = FakeComputeRepository()
-        let inferenceRepo = FakeInferenceRepository()
         let store = Store(
             initialState: AppState(),
             reducer: AppReducer.reduce,
-            middlewares: [makeComputeMiddleware(computeRepo: computeRepo, inferenceRepo: inferenceRepo, windowDuration: 300, stepInterval: 60)]
+            middlewares: [makeComputeMiddleware(computeRepo: computeRepo, windowDuration: 300, stepInterval: 60)]
         )
         let samples = [
             HeartRateSample(timestamp: Date(), heartRate: 72, rrIntervals: [800, 820]),
@@ -98,5 +93,20 @@ final class ComputeMiddlewareTests: XCTestCase {
         store.dispatch(.heartRateReceived(samples))
         try? await Task.sleep(nanoseconds: 400_000_000)
         XCTAssertEqual(computeRepo.computeCallCount, 1)
+    }
+
+    func test_computeStarted_setsComputingBeforeReady() async {
+        let computeRepo = FakeComputeRepository()
+        let store = makeStore(computeRepo: computeRepo, step: 60)
+        let samples = [
+            HeartRateSample(timestamp: Date(), heartRate: 72, rrIntervals: [800, 820]),
+            HeartRateSample(timestamp: Date(), heartRate: 73, rrIntervals: [790, 810]),
+        ]
+
+        store.dispatch(.heartRateReceived(samples))
+
+        XCTAssertEqual(store.state.metrics.computationStatus, .computing)
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        XCTAssertEqual(store.state.metrics.computationStatus, .ready)
     }
 }

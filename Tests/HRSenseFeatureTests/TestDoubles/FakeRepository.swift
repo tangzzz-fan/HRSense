@@ -105,9 +105,13 @@ final class FakeComputeRepository: ComputeRepository, @unchecked Sendable {
 
 final class FakeInferenceRepository: InferenceRepository, @unchecked Sendable {
     var inferenceCallCount = 0
+    var lastReceivedFeatures: [Float] = []
+    var shouldThrow = false
 
     func runInference(features: [Float]) async throws -> InferenceResult {
         inferenceCallCount += 1
+        lastReceivedFeatures = features
+        if shouldThrow { throw AppError.inferenceFailed }
         return InferenceResult(label: "Baseline", probabilities: ["Baseline": 0.75], modelVersion: "1.0")
     }
 }

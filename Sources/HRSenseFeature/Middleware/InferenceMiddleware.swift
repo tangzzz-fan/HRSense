@@ -20,6 +20,7 @@ public func makeInferenceMiddleware(
 
         switch action {
         case .featuresExtracted(let features):
+            store.dispatch(.inferenceStarted)
             Task {
                 do {
                     let result = try await inferenceRepo.runInference(features: features.values)

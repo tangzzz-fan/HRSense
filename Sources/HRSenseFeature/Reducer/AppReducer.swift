@@ -8,8 +8,8 @@ import HRSenseCore
 /// Key rules:
 ///   - heartRateReceived: append to recentSamples, suffix(600) truncation
 ///   - connectionStateChanged: update connection; .connected clears error
-///   - hrvComputed: set metrics.latestHRV
-///   - inferenceCompleted: set inference.latestResult
+///   - computeStarted/hrvComputed: drive metrics.computationStatus
+///   - featuresExtracted/inferenceStarted/inferenceCompleted: drive explicit inference pipeline state
 ///   - errorOccurred: set error; connection-class errors set connection = .disconnected
 ///   - dismissError: nil out error
 public enum AppReducer {
@@ -57,18 +57,22 @@ public enum AppReducer {
         case .deviceEvent:
             break // Handled by middleware for logging; state unchanged
 
+        case .computeStarted:
+            state.metrics.computationStatus = .computing
+
         case .hrvComputed(let metrics):
             state.metrics.latestHRV = metrics
             state.metrics.computationStatus = .ready
+
+        case .inferenceStarted:
+            state.inference.status = .running
 
         case .inferenceCompleted(let result):
             state.inference.latestResult = result
             state.inference.status = .completed
 
-        case .featuresExtracted:
-            // Feature vector is consumed by InferenceMiddleware for CoreML input.
-            // No state change needed — this is a signalling action.
-            break
+        case .featuresExtracted(let features):
+            state.inference.latestFeatures = features
 
         case .otaStateChanged(let ota):
             state.ota = ota
@@ -90,6 +94,14 @@ public enum AppReducer {
 
         case .errorOccurred(let error):
             state.error = error
+            switch error {
+            case .computeFailed:
+                state.metrics.computationStatus = .idle
+            case .inferenceFailed:
+                state.inference.status = .idle
+            default:
+                break
+            }
             // Connection-class errors force disconnection
             switch error {
             case .connectionTimeout, .connectionLost, .bluetoothPoweredOff:

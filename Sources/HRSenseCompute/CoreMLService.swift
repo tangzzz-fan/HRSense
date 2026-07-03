@@ -6,8 +6,14 @@ import CoreML
 /// M8 baseline: loads a placeholder model (14 features → 2 classes: Baseline/Stress).
 /// Swappable for real trained models with the same input/output spec.
 public final class CoreMLService: @unchecked Sendable {
+    private enum Constants {
+        static let expectedFeatureCount = 14
+        static let fallbackModelVersion = "fallback-rule-engine"
+    }
 
-    private var model: MLModel?
+    private let model: MLModel?
+    public let activeModelDescriptor: ModelDescriptor?
+    public let activeModelVersion: String
 
     public struct PredictionResult: Sendable {
         public let label: String
@@ -15,25 +21,47 @@ public final class CoreMLService: @unchecked Sendable {
         public let inferenceTimeMs: Double
     }
 
-    /// Try to load a model from the app bundle or a file URL.
-    public init(modelURL: URL? = nil) {
-        if let url = modelURL {
-            do {
-                let compiledURL = try MLModel.compileModel(at: url)
-                self.model = try MLModel(contentsOf: compiledURL)
-            } catch {
-                // Model loading failed — use fallback dummy
-                self.model = nil
-            }
+    /// Loads an explicitly provided model URL or resolves one through the catalog + strategy pair.
+    public init(
+        modelURL: URL? = nil,
+        selectionRequest: ModelSelectionRequest = .stressClassifierV1,
+        modelCatalog: any CoreMLModelCatalog = BundleCoreMLModelCatalog(),
+        selectionStrategy: any ModelSelectionStrategy = DefaultModelSelectionStrategy()
+    ) {
+        let selectedDescriptor = Self.resolveDescriptor(
+            modelURL: modelURL,
+            selectionRequest: selectionRequest,
+            modelCatalog: modelCatalog,
+            selectionStrategy: selectionStrategy
+        )
+
+        if
+            let selectedDescriptor,
+            let loadedModel = Self.loadModel(at: selectedDescriptor.url)
+        {
+            self.model = loadedModel
+            let resolvedVersion = CoreMLModelInspector.modelVersion(from: loadedModel.modelDescription.metadata)
+                ?? selectedDescriptor.modelVersion
+            self.activeModelDescriptor = ModelDescriptor(
+                modelName: selectedDescriptor.modelName,
+                modelVersion: resolvedVersion,
+                task: selectedDescriptor.task,
+                featureContractVersion: selectedDescriptor.featureContractVersion,
+                url: selectedDescriptor.url
+            )
+            self.activeModelVersion = resolvedVersion
+        } else {
+            self.model = nil
+            self.activeModelDescriptor = nil
+            self.activeModelVersion = Constants.fallbackModelVersion
         }
     }
 
     /// Run inference on a 14-element feature vector.
-    /// Returns a PredictionResult, or nil if no model is loaded.
+    /// Returns a PredictionResult, or nil if the feature vector shape is invalid.
     public func predict(features: [Float]) -> PredictionResult? {
-        guard features.count == 14 else { return nil }
+        guard features.count == Constants.expectedFeatureCount else { return nil }
 
-        // If no model loaded, return dummy result
         guard let model = model else {
             return fallbackPrediction(features: features)
         }
@@ -41,19 +69,20 @@ public final class CoreMLService: @unchecked Sendable {
         let start = CFAbsoluteTimeGetCurrent()
 
         do {
-            let multiArray = try? MLMultiArray(shape: [14], dataType: .float32)
-            for i in 0..<features.count {
-                multiArray?[i] = NSNumber(value: features[i])
+            let multiArray = try MLMultiArray(
+                shape: [NSNumber(value: Constants.expectedFeatureCount)],
+                dataType: .float32
+            )
+            for (index, feature) in features.enumerated() {
+                multiArray[index] = NSNumber(value: feature)
             }
-            guard let inputArray = multiArray else { return nil }
             let input = try MLDictionaryFeatureProvider(dictionary: [
-                "features": inputArray
+                "features": multiArray
             ])
             let output = try model.prediction(from: input)
 
             let elapsed = (CFAbsoluteTimeGetCurrent() - start) * 1000.0
 
-            // Parse output
             var label = "Baseline"
             var probs: [String: Double] = [:]
             if let classLabel = output.featureValue(for: "classLabel")?.stringValue {
@@ -65,9 +94,13 @@ public final class CoreMLService: @unchecked Sendable {
                 }
             }
 
+            if probs.isEmpty {
+                probs = defaultProbabilities(for: label)
+            }
+
             return PredictionResult(label: label, probabilities: probs, inferenceTimeMs: elapsed)
         } catch {
-            return nil
+            return fallbackPrediction(features: features)
         }
     }
 
@@ -79,8 +112,41 @@ public final class CoreMLService: @unchecked Sendable {
         let isStress = hr > 90 || rmssd < 30
         return PredictionResult(
             label: isStress ? "Stress" : "Baseline",
-            probabilities: ["Baseline": isStress ? 0.3 : 0.7, "Stress": isStress ? 0.7 : 0.3],
+            probabilities: defaultProbabilities(for: isStress ? "Stress" : "Baseline"),
             inferenceTimeMs: 0.05
+        )
+    }
+
+    private func defaultProbabilities(for label: String) -> [String: Double] {
+        if label == "Stress" {
+            return ["Baseline": 0.3, "Stress": 0.7]
+        }
+        return ["Baseline": 0.7, "Stress": 0.3]
+    }
+
+    private static func loadModel(at url: URL) -> MLModel? {
+        CoreMLModelInspector.loadModel(at: url)
+    }
+
+    private static func resolveDescriptor(
+        modelURL: URL?,
+        selectionRequest: ModelSelectionRequest,
+        modelCatalog: any CoreMLModelCatalog,
+        selectionStrategy: any ModelSelectionStrategy
+    ) -> ModelDescriptor? {
+        if let modelURL {
+            return CoreMLModelInspector.inspectModel(at: modelURL) ?? ModelDescriptor(
+                modelName: modelURL.deletingPathExtension().lastPathComponent,
+                modelVersion: CoreMLModelInspector.modelVersionFallback(from: modelURL),
+                task: selectionRequest.task.rawValue,
+                featureContractVersion: selectionRequest.featureContractVersion,
+                url: modelURL
+            )
+        }
+
+        return selectionStrategy.selectModel(
+            from: modelCatalog.discoverModels(),
+            request: selectionRequest
         )
     }
 }

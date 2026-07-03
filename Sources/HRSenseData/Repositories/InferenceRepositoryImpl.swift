@@ -14,6 +14,20 @@ public final class InferenceRepositoryImpl: InferenceRepository, @unchecked Send
         self.mlService = mlService
     }
 
+    public convenience init(
+        selectionRequest: ModelSelectionRequest,
+        modelCatalog: any CoreMLModelCatalog = BundleCoreMLModelCatalog(),
+        selectionStrategy: any ModelSelectionStrategy = DefaultModelSelectionStrategy()
+    ) {
+        self.init(
+            mlService: CoreMLService(
+                selectionRequest: selectionRequest,
+                modelCatalog: modelCatalog,
+                selectionStrategy: selectionStrategy
+            )
+        )
+    }
+
     public func runInference(features: [Float]) async throws -> InferenceResult {
         let result = mlService.predict(features: features)
 
@@ -23,7 +37,7 @@ public final class InferenceRepositoryImpl: InferenceRepository, @unchecked Send
                 probabilities: prediction.probabilities.mapValues { Float($0) },
                 inferenceTimeMs: prediction.inferenceTimeMs,
                 timestamp: Date(),
-                modelVersion: "1.0.0"
+                modelVersion: mlService.activeModelVersion
             )
         }
 
@@ -33,7 +47,7 @@ public final class InferenceRepositoryImpl: InferenceRepository, @unchecked Send
             probabilities: ["Baseline": 0.7, "Stress": 0.3],
             inferenceTimeMs: 0,
             timestamp: Date(),
-            modelVersion: "1.0.0"
+            modelVersion: mlService.activeModelVersion
         )
     }
 }

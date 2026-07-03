@@ -3,15 +3,14 @@ import HRSenseCore
 import TGReduxKit
 
 /// Middleware that accumulates RR intervals in a 5-minute sliding window
-/// and triggers C++ HRV computation → feature extraction → CoreML inference.
+/// and triggers C++ HRV computation → feature extraction.
 ///
 /// Window: 5 min (300s)
 /// Step: 30s (computation triggered every 30s of new data)
 ///
-/// Pipeline: RR intervals → hrs_compute_hrv() → 14 features → CoreML → InferenceResult
+/// Pipeline: RR intervals → hrs_compute_hrv() → 14 features → featuresExtracted
 public func makeComputeMiddleware(
     computeRepo: any ComputeRepository,
-    inferenceRepo: any InferenceRepository,
     windowDuration: TimeInterval = 300,
     stepInterval: TimeInterval = 30
 ) -> Middleware<AppState, Action> {
@@ -37,6 +36,7 @@ public func makeComputeMiddleware(
             let now = Date()
             if now.timeIntervalSince(lastComputeTime) >= stepInterval, rrBuffer.count >= 2 {
                 lastComputeTime = now
+                store.dispatch(.computeStarted)
 
                 let rrValues = rrBuffer.map { UInt16($0.rr) }
                 Task {
@@ -46,10 +46,9 @@ public func makeComputeMiddleware(
                             store.dispatch(.hrvComputed(metrics))
                         }
 
-                        let features = metrics.toFeatureVector()
-                        let result = try await inferenceRepo.runInference(features: features)
+                        let features = FeatureVector(metrics: metrics)
                         await MainActor.run {
-                            store.dispatch(.inferenceCompleted(result))
+                            store.dispatch(.featuresExtracted(features))
                         }
                     } catch {
                         await MainActor.run {

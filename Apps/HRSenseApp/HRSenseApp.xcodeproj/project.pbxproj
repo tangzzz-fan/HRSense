@@ -22,6 +22,13 @@
 			);
 			target = 1817510B2FF744B000072403 /* HRSenseApp */;
 		};
+		A20000072FF8000000000007 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				.gitkeep,
+			);
+			target = 1817510B2FF744B000072403 /* HRSenseApp */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -31,6 +38,14 @@
 				A20000062FF8000000000006 /* PBXFileSystemSynchronizedBuildFileExceptionSet */,
 			);
 			path = HRSenseApp;
+			sourceTree = "<group>";
+		};
+		A20000082FF8000000000008 /* Models */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				A20000072FF8000000000007 /* PBXFileSystemSynchronizedBuildFileExceptionSet */,
+			);
+			path = ../../Models;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -51,6 +66,7 @@
 			isa = PBXGroup;
 			children = (
 				1817510E2FF744B000072403 /* HRSenseApp */,
+				A20000082FF8000000000008 /* Models */,
 				1817510D2FF744B000072403 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -80,6 +96,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				1817510E2FF744B000072403 /* HRSenseApp */,
+				A20000082FF8000000000008 /* Models */,
 			);
 			name = HRSenseApp;
 			packageProductDependencies = (

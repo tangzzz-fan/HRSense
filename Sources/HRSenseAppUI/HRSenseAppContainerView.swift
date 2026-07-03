@@ -37,7 +37,7 @@ public struct HRSenseAppContainerView: View {
                 backoffProvider: { [bleDataSource] in bleDataSource.connectionStateMachine.nextBackoff() }
             ),
             makeBLEStreamMiddleware(deviceRepo: deviceRepo),
-            makeComputeMiddleware(computeRepo: computeRepo, inferenceRepo: inferenceRepo),
+            makeComputeMiddleware(computeRepo: computeRepo),
             makeInferenceMiddleware(inferenceRepo: inferenceRepo),
             makeLoggingMiddleware(),
             makeWaveformMiddleware(waveformRingBuffer: waveformBuffer),

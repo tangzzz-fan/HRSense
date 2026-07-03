@@ -23,9 +23,11 @@ public enum Action: Equatable, Sendable {
     case deviceEvent(DeviceEvent)
 
     // MARK: Compute (M8 full impl)
+    case computeStarted
     case hrvComputed(HRVMetrics)
 
     // MARK: Inference (M8 full impl)
+    case inferenceStarted
     case inferenceCompleted(InferenceResult)
     case featuresExtracted(FeatureVector)  // M8: intermediate step — 14 features extracted
 
@@ -59,7 +61,9 @@ extension Action: CustomStringConvertible {
         case .deviceInfoUpdated(let i): return "deviceInfoUpdated(\(i.name) fw=\(i.firmwareVersion))"
         case .heartRateReceived(let s): return "heartRateReceived(\(s.count) samples)"
         case .deviceEvent: return "deviceEvent"
+        case .computeStarted: return "computeStarted"
         case .hrvComputed: return "hrvComputed"
+        case .inferenceStarted: return "inferenceStarted"
         case .inferenceCompleted: return "inferenceCompleted"
         case .featuresExtracted: return "featuresExtracted"
         case .otaStateChanged(let o): return "otaStateChanged(\(o.phase))"
