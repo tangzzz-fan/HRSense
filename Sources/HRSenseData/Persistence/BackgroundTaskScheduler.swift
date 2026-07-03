@@ -94,25 +94,30 @@ private extension BackgroundTaskScheduler {
     func handle(_ task: BGAppRefreshTask) {
         scheduleNextRun()
 
-        let completionGate = BGTaskCompletionGate()
+        let completionGate = BGTaskCompletionGate(task: task)
         let operation = Task(priority: .utility) {
             await performCleanup()
-            completionGate.finish(task: task, success: !Task.isCancelled)
+            completionGate.finish(success: !Task.isCancelled)
         }
 
         task.expirationHandler = {
             operation.cancel()
-            completionGate.finish(task: task, success: false)
+            completionGate.finish(success: false)
         }
     }
 }
 
 @available(iOS 13.0, *)
-private final class BGTaskCompletionGate {
+private final class BGTaskCompletionGate: @unchecked Sendable {
     private let lock = NSLock()
+    private let task: BGTask
     private var isCompleted = false
 
-    func finish(task: BGTask, success: Bool) {
+    init(task: BGTask) {
+        self.task = task
+    }
+
+    func finish(success: Bool) {
         let shouldFinish = lock.withLock { () -> Bool in
             guard !isCompleted else { return false }
             isCompleted = true
