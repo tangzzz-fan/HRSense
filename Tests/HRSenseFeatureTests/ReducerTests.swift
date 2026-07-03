@@ -246,6 +246,18 @@ final class ReducerTests: XCTestCase {
         XCTAssertTrue(state.waveform.isStreaming)
     }
 
+    func test_waveformSamplesReceived_routesSamplesByType() {
+        var state = AppState()
+        let ecgSample = WaveformSample(type: .ecg, sampleRateHz: 128, timestamp: Date(), value: 0.5)
+        let ppgSample = WaveformSample(type: .ppg, sampleRateHz: 64, timestamp: Date(), value: 0.25)
+
+        AppReducer.reduce(state: &state, action: .waveformSamplesReceived([ecgSample, ppgSample]))
+
+        XCTAssertEqual(state.waveform.ecgSamples, [ecgSample])
+        XCTAssertEqual(state.waveform.ppgSamples, [ppgSample])
+        XCTAssertTrue(state.waveform.isStreaming)
+    }
+
     func test_waveformMetricsUpdated_updatesMetrics() {
         var state = AppState()
         var metrics = WaveformMetrics()

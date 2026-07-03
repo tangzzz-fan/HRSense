@@ -48,7 +48,7 @@ public struct WaveformCanvasView: View {
                         if v > colMax { colMax = v }
                     }
                     let x = CGFloat(px)
-                    let yMin = midY - CGFloat(colMax) * scaleY / 1000.0
+                    let yMin = midY - CGFloat(colMax) * scaleY
 
                     if !started {
                         path.move(to: CGPoint(x: x, y: yMin))
@@ -71,7 +71,7 @@ public struct WaveformCanvasView: View {
                         if v > colMax { colMax = v }
                     }
                     let x = CGFloat(px)
-                    let yMax = midY - CGFloat(colMin) * scaleY / 1000.0
+                    let yMax = midY - CGFloat(colMin) * scaleY
                     path.addLine(to: CGPoint(x: x, y: yMax))
                 }
                 path.closeSubpath()
