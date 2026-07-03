@@ -270,6 +270,144 @@
   - 趋势图/HRV 图的数据源
   - 睡眠分期结果落库
 
+## 第三层已开始：WaveformFileStore
+
+`plans/09-m9-storage-visualization-sleep.md` 的阶段 3 目标是：
+
+- `WaveformFileStore.swift`
+- 二进制块文件格式
+- SHA-256 整文件校验
+- `Application Support/HRSense/waveforms/<sessionId>/<type>_<startTs>.bin` 存储布局
+
+这轮已经按这个范围开始落地 `WaveformFileStore`，没有提前把它和：
+
+- `PersistenceMiddleware`
+- Redux Action
+- 图表层读取
+- 睡眠链路
+
+混在一起。
+
+### 1. 本轮新增的 Phase 3 代码
+
+- `Sources/HRSenseData/Persistence/WaveformFileStore.swift`
+  - `writeChunks`
+  - `readChunks`
+  - `deleteChunks`
+  - `verifyChecksum`
+
+- `Tests/HRSenseDataTests/WaveformFileStoreTests.swift`
+  - 二进制往返一致测试
+  - 文件路径布局测试
+  - 篡改后 checksum 失败测试
+  - 删除文件测试
+
+### 2. 这轮如何对齐 plans 中的文件格式
+
+当前落地的文件格式保持了 `plans` 里的核心结构：
+
+- **文件头**
+  - `magic = 0x48525357`
+  - `version = 1`
+  - `sampleRateHz`
+  - `sampleBits`
+
+- **块数组**
+  - `blockSeq:u32`
+  - `timestampOffsetMs:u32`
+  - `sampleCount:u16`
+  - `samples:i16[]`
+
+- **整文件校验**
+  - 使用 SHA-256
+  - 写入后把 checksum 存入 `WaveformBlobRef`
+  - 读取时先校验，再解码
+
+这里特意保持文件体只存“块数据本身”，而把：
+
+- `sessionID`
+- `type`
+- `startTimestamp`
+- `fileURL`
+
+继续放在 `WaveformBlobRef` 元数据里管理。
+
+这样做是为了继续满足 spec 里的约束：
+
+- 波形二进制格式独立于结构化 DB
+- 未来 `SwiftDataStore -> GRDBStore` 时，不需要同时迁移波形文件格式
+
+### 3. 为什么校验放在整文件层，而不是单块层
+
+如果一开始就把校验做成“每块一个 checksum”，会让阶段 3 过早复杂化，带来两个问题：
+
+- 文件格式膨胀，后面保留/归档时要处理更多额外字段
+- 读取路径需要先逐块验，再整体拼装，初期实现复杂度更高
+
+而 `M9` 当前阶段最先需要解决的问题是：
+
+- 文件能不能稳定写进去
+- 后面能不能原样读出来
+- 文件被篡改或损坏时能不能被发现
+
+所以现在先用**整文件 SHA-256** 解决“完整性”问题，后续如果需要做局部恢复或增量拼接，再考虑扩展块级校验。
+
+### 4. 为什么时间字段使用 `timestampOffsetMs`
+
+这里没有在每个块里重复存完整绝对时间，而是存相对文件起点的 `timestampOffsetMs`，原因有三点：
+
+- 文件更紧凑
+- 更贴近波形块本身“相对 t0”的流式特征
+- 后续如果波形文件被复制、迁移或导入，块内时间仍然自洽
+
+绝对时间继续由 `WaveformBlobRef.startTimestamp` 负责，这样元数据和块数据的职责更清晰。
+
+### 5. 这轮如何防止文件格式偏移
+
+进入阶段 3 后，最容易发生的偏移不在 UI，而在文件层：
+
+1. **字段顺序偏移**
+   - 写的时候一个顺序，读的时候另一个顺序
+
+2. **端序偏移**
+   - 某个整数字段不小心按大端写入
+
+3. **路径布局偏移**
+   - 文件名改了，`WaveformBlobRef` 还在用旧约定
+
+4. **校验策略偏移**
+   - 写入后没有同步更新 checksum
+   - 读取时直接跳过校验
+
+针对这些风险，这轮的防偏移策略是：
+
+- **显式 little-endian 编解码**
+  - 所有整数都通过固定的小端读写辅助函数处理
+
+- **往返测试锁格式**
+  - 写入 chunk -> 读回 chunk 必须完全一致
+
+- **篡改测试锁校验**
+  - 手动改文件一个字节后，`verifyChecksum` 必须失败
+  - `readChunks` 必须拒绝继续解码
+
+- **路径测试锁布局**
+  - 文件路径必须符合 `<sessionId>/<type>_<startTs>.bin`
+
+### 6. 对下一步的直接意义
+
+到这里，`M9` 的混合存储已经具备两条基础腿：
+
+- 结构化数据：`SwiftDataStore`
+- 大块波形文件：`WaveformFileStore`
+
+下一步就可以继续按计划进入：
+
+1. `RetentionCleanupTask`
+2. `PersistenceMiddleware`
+3. 图表查询接线
+4. 波形文件和 `WaveformBlobRef` 的真实接线
+
 ## 对 M9 下一步的直接意义
 
 这轮完成后，`M9` 已经从“只有规划文档、没有代码边界”推进到“有明确的领域模型和可验证的存储契约”。
