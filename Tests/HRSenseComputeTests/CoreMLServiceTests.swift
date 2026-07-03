@@ -61,8 +61,14 @@ final class CoreMLServiceTests: XCTestCase {
             return
         }
         XCTAssertNotEqual(service.activeModelVersion, "fallback-rule-engine")
+        XCTAssertEqual(service.activeModelVersion, "1.0.0-placeholder")
         XCTAssertEqual(service.activeModelDescriptor?.modelName, "StressClassifier_v1")
         XCTAssertEqual(Set(prediction.probabilities.keys), Set<String>(["Baseline", "Stress"]))
+        XCTAssertEqual(
+            prediction.probabilities.values.reduce(0, +),
+            1,
+            accuracy: 0.0001
+        )
     }
 
     func test_fallbackPredictionGoldenSamplesRemainStable() {
@@ -83,6 +89,35 @@ final class CoreMLServiceTests: XCTestCase {
         XCTAssertEqual(baseline?.label, "Baseline")
         XCTAssertEqual(baseline?.probabilities["Baseline"] ?? 0, 0.7, accuracy: 0.0001)
         XCTAssertEqual(baseline?.probabilities["Stress"] ?? 0, 0.3, accuracy: 0.0001)
+    }
+
+    func test_fallbackPredictionThresholdContractRemainsStable() {
+        let missingURL = URL(fileURLWithPath: "/tmp/HRSense/MissingModel.mlpackage")
+        let service = CoreMLService(modelURL: missingURL)
+
+        let baselineAtThreshold = service.predict(
+            features: [0, 30, 0, 800, 90, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        )
+        let stressByRMSSD = service.predict(
+            features: [0, 29.9, 0, 800, 90, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        )
+        let stressByHR = service.predict(
+            features: [0, 30, 0, 800, 90.1, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        )
+
+        XCTAssertEqual(service.activeModelVersion, "fallback-rule-engine")
+
+        XCTAssertEqual(baselineAtThreshold?.label, "Baseline")
+        XCTAssertEqual(baselineAtThreshold?.probabilities["Baseline"] ?? 0, 0.7, accuracy: 0.0001)
+        XCTAssertEqual(baselineAtThreshold?.probabilities["Stress"] ?? 0, 0.3, accuracy: 0.0001)
+
+        XCTAssertEqual(stressByRMSSD?.label, "Stress")
+        XCTAssertEqual(stressByRMSSD?.probabilities["Stress"] ?? 0, 0.7, accuracy: 0.0001)
+        XCTAssertEqual(stressByRMSSD?.probabilities["Baseline"] ?? 0, 0.3, accuracy: 0.0001)
+
+        XCTAssertEqual(stressByHR?.label, "Stress")
+        XCTAssertEqual(stressByHR?.probabilities["Stress"] ?? 0, 0.7, accuracy: 0.0001)
+        XCTAssertEqual(stressByHR?.probabilities["Baseline"] ?? 0, 0.3, accuracy: 0.0001)
     }
 
     func test_predictRejectsUnexpectedFeatureCount() {
