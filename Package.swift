@@ -36,9 +36,9 @@ let package = Package(
         .executableTarget(name: "HRSenseApp",
                 dependencies: ["HRSenseFeature", "HRSenseData", "HRSenseCore", "HRSenseProtocol"]),
         .testTarget(name: "HRSenseProtocolTests", dependencies: ["HRSenseProtocol"]),
-        .testTarget(name: "HRSenseComputeTests", dependencies: ["HRSenseCompute"]),
-        .testTarget(name: "HRSenseDataTests", dependencies: ["HRSenseData"]),
-        .testTarget(name: "HRSenseFeatureTests", dependencies: ["HRSenseFeature"]),
-        .testTarget(name: "HRSenseSimulatorKitTests", dependencies: ["HRSenseSimulatorKit"]),
+        .testTarget(name: "HRSenseComputeTests", dependencies: ["HRSenseCompute", "HRSenseComputeCxx"]),
+        .testTarget(name: "HRSenseDataTests", dependencies: ["HRSenseData", "HRSenseComputeCxx"]),
+        .testTarget(name: "HRSenseFeatureTests", dependencies: ["HRSenseFeature", "HRSenseComputeCxx"]),
+        .testTarget(name: "HRSenseSimulatorKitTests", dependencies: ["HRSenseSimulatorKit", "HRSenseComputeCxx"]),
     ]
 )

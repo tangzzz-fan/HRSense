@@ -21,7 +21,7 @@ struct HRSenseApp: App {
         let middleware: [Middleware<AppState, Action>] = [
             makeConnectionMiddleware(deviceRepo: deviceRepo),
             makeBLEStreamMiddleware(deviceRepo: deviceRepo),
-            makeComputeMiddleware(computeRepo: computeRepo),
+            makeComputeMiddleware(computeRepo: computeRepo, inferenceRepo: inferenceRepo),
             makeInferenceMiddleware(inferenceRepo: inferenceRepo),
         ]
 

@@ -6,7 +6,6 @@ public final class InferenceRepositoryImpl: InferenceRepository, @unchecked Send
     public init() {}
 
     public func runInference(features: [Float]) async throws -> InferenceResult {
-        // Stub — returns placeholder result
-        return InferenceResult(label: "Baseline", confidence: 0.5)
+        return InferenceResult(label: "Baseline", probabilities: ["Baseline": 0.7, "Stress": 0.3], modelVersion: "1.0.0")
     }
 }

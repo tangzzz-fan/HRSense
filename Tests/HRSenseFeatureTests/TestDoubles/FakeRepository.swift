@@ -84,6 +84,6 @@ final class FakeInferenceRepository: InferenceRepository, @unchecked Sendable {
 
     func runInference(features: [Float]) async throws -> InferenceResult {
         inferenceCallCount += 1
-        return InferenceResult(label: "Baseline", confidence: 0.75)
+        return InferenceResult(label: "Baseline", probabilities: ["Baseline": 0.75], modelVersion: "1.0")
     }
 }

@@ -92,7 +92,7 @@ final class ReducerTests: XCTestCase {
 
     func test_inferenceCompleted_updatesState() {
         var state = AppState()
-        let result = InferenceResult(label: "Stress", confidence: 0.85)
+        let result = InferenceResult(label: "Stress", probabilities: ["Stress": 0.85], modelVersion: "1.0")
         AppReducer.reduce(state: &state, action: .inferenceCompleted(result))
         XCTAssertEqual(state.inference.latestResult, result)
         XCTAssertEqual(state.inference.status, .completed)
