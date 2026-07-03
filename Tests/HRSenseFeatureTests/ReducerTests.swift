@@ -4,6 +4,43 @@ import XCTest
 
 final class ReducerTests: XCTestCase {
 
+    // MARK: - Lifecycle / restore (M10)
+
+    func test_didEnterBackground_setsLifecycleBackground() {
+        var state = AppState()
+        AppReducer.reduce(state: &state, action: .didEnterBackground)
+        XCTAssertEqual(state.lifecycle, .background)
+    }
+
+    func test_willEnterForeground_setsLifecycleActive() {
+        var state = AppState(lifecycle: .background)
+        AppReducer.reduce(state: &state, action: .willEnterForeground)
+        XCTAssertEqual(state.lifecycle, .active)
+    }
+
+    func test_restoreInitiated_setsRestoringAndRestoredConnection() {
+        var state = AppState(connection: .connected, error: .connectionLost)
+        AppReducer.reduce(state: &state, action: .restoreInitiated(peripheralIDs: [UUID()]))
+        XCTAssertEqual(state.lifecycle, .restoring)
+        XCTAssertEqual(state.connection, .restored)
+        XCTAssertNil(state.error)
+    }
+
+    func test_restoreConnectionRestored_setsRestoredConnected() {
+        var state = AppState(lifecycle: .restoring, connection: .restored)
+        AppReducer.reduce(state: &state, action: .restoreConnectionRestored(peripheralIDs: [UUID()]))
+        XCTAssertEqual(state.lifecycle, .active)
+        XCTAssertEqual(state.connection, .restoredConnected)
+    }
+
+    func test_restoreFailed_setsDisconnectedAndError() {
+        var state = AppState(lifecycle: .restoring, connection: .restored)
+        AppReducer.reduce(state: &state, action: .restoreFailed(reason: "device identity mismatch"))
+        XCTAssertEqual(state.lifecycle, .active)
+        XCTAssertEqual(state.connection, .disconnected)
+        XCTAssertEqual(state.error, .handshakeFailed(reason: "device identity mismatch"))
+    }
+
     // MARK: - Scanning
 
     func test_startScanning_setsState() {

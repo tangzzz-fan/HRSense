@@ -18,6 +18,10 @@ public protocol DeviceRepository: AnyObject, Sendable {
     /// Async stream of device info updates (emitted after successful handshake).
     var deviceInfoStream: AsyncStream<DeviceInfo> { get }
 
+    /// Async stream of restored peripheral identifiers reported by CoreBluetooth
+    /// state preservation/restoration.
+    var restoredPeripheralIDsStream: AsyncStream<[UUID]> { get }
+
     /// Start scanning for HRSense peripherals.
     func startScanning() async
 

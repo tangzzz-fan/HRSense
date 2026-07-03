@@ -284,7 +284,8 @@ public struct RootView: View {
     private var connectionColor: Color {
         switch store.state.connection {
         case .connected: return .green
-        case .connecting, .handshaking: return .yellow
+        case .connecting, .handshaking, .restoredValidating: return .yellow
+        case .restored, .restoredConnected: return .mint
         case .disconnecting: return .orange
         case .disconnected, .idle: return .gray
         case .scanning: return .blue
@@ -298,6 +299,9 @@ public struct RootView: View {
         case .connecting: return "Connecting..."
         case .handshaking: return "Handshaking..."
         case .connected: return "Connected"
+        case .restored: return "Restoring..."
+        case .restoredValidating: return "Validating Restore..."
+        case .restoredConnected: return "Restored"
         case .disconnecting: return "Disconnecting..."
         case .disconnected: return "Disconnected"
         }
@@ -307,7 +311,7 @@ public struct RootView: View {
         switch store.state.connection {
         case .idle, .scanning, .disconnected:
             return true
-        case .connecting, .handshaking, .connected, .disconnecting:
+        case .connecting, .handshaking, .connected, .restored, .restoredValidating, .restoredConnected, .disconnecting:
             return false
         }
     }

@@ -4,6 +4,7 @@ import TGReduxKit
 
 @MainActor
 public struct HRSenseAppContainerView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @State private var store: Store<AppState, Action>
     private let runtimeServices: AppComposition.RuntimeServices?
 #if DEBUG
@@ -23,6 +24,16 @@ public struct HRSenseAppContainerView: View {
     public var body: some View {
         RootView()
             .provideStore(store)
+            .onChange(of: scenePhase) { _, newPhase in
+                switch newPhase {
+                case .background:
+                    store.dispatch(.didEnterBackground)
+                case .active:
+                    store.dispatch(.willEnterForeground)
+                default:
+                    break
+                }
+            }
 #if DEBUG
             .environmentObject(diagnosticPanelModel)
             .overlay(alignment: .topTrailing) {

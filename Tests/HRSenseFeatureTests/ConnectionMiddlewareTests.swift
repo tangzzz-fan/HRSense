@@ -92,6 +92,19 @@ final class ConnectionMiddlewareTests: XCTestCase {
         XCTAssertEqual(store.state.device?.firmwareVersion, "2.0")
     }
 
+    func test_restoredPeripheralIDsStream_dispatchesRestoreInitiated() async {
+        let repo = FakeDeviceRepository()
+        let store = makeStore(repo: repo)
+        let restoredID = UUID()
+
+        store.dispatch(.startScanning)
+        repo.emitRestoredPeripheralIDs([restoredID])
+        try? await Task.sleep(nanoseconds: 200_000_000)
+
+        XCTAssertEqual(store.state.lifecycle, .restoring)
+        XCTAssertEqual(store.state.connection, .restored)
+    }
+
     // MARK: - Reconnection with backoff
 
     func test_exponentialBackoff_isCalled() async {

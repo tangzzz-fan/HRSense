@@ -5,6 +5,13 @@ import HRSenseCore
 /// All state mutations flow through this enum — no side channels.
 /// Extended incrementally in M8 (compute/inference) and M10 (lifecycle/restore).
 public enum Action: Equatable, Sendable {
+    // MARK: App lifecycle (M10)
+    case didEnterBackground
+    case willEnterForeground
+    case restoreInitiated(peripheralIDs: [UUID])
+    case restoreConnectionRestored(peripheralIDs: [UUID])
+    case restoreFailed(reason: String)
+
     // MARK: Scanning
     case startScanning
     case stopScanning
@@ -55,6 +62,11 @@ public enum Action: Equatable, Sendable {
 extension Action: CustomStringConvertible {
     public var description: String {
         switch self {
+        case .didEnterBackground: return "didEnterBackground"
+        case .willEnterForeground: return "willEnterForeground"
+        case .restoreInitiated(let ids): return "restoreInitiated(\(ids.count) peripherals)"
+        case .restoreConnectionRestored(let ids): return "restoreConnectionRestored(\(ids.count) peripherals)"
+        case .restoreFailed(let reason): return "restoreFailed(\(reason))"
         case .startScanning: return "startScanning"
         case .stopScanning: return "stopScanning"
         case .deviceDiscovered(let d): return "deviceDiscovered(\(d.name))"

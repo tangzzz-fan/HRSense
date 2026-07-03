@@ -3,6 +3,8 @@ import HRSenseCore
 
 /// Root application state — all state is Equatable for deterministic testing.
 public struct AppState: Equatable, Sendable {
+    /// App lifecycle state (foreground/background/restore).
+    public var lifecycle: AppLifecycleState
     /// BLE connection status.
     public var connection: ConnectionState
     /// Discovered BLE devices available for connection.
@@ -25,6 +27,7 @@ public struct AppState: Equatable, Sendable {
     public var error: AppError?
 
     public init(
+        lifecycle: AppLifecycleState = .active,
         connection: ConnectionState = .idle,
         discoveredDevices: [DeviceInfo] = [],
         device: DeviceInfo? = nil,
@@ -36,6 +39,7 @@ public struct AppState: Equatable, Sendable {
         waveform: WaveformState = WaveformState(),
         error: AppError? = nil
     ) {
+        self.lifecycle = lifecycle
         self.connection = connection
         self.discoveredDevices = discoveredDevices
         self.device = device

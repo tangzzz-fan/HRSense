@@ -32,6 +32,14 @@ public func makeConnectionMiddleware(
                 }
             }
             Task {
+                for await peripheralIDs in deviceRepo.restoredPeripheralIDsStream {
+                    guard !peripheralIDs.isEmpty else { continue }
+                    await MainActor.run {
+                        store.dispatch(.restoreInitiated(peripheralIDs: peripheralIDs))
+                    }
+                }
+            }
+            Task {
                 for await device in deviceRepo.discoveredDevicesStream {
                     await MainActor.run {
                         store.dispatch(.deviceDiscovered(device))

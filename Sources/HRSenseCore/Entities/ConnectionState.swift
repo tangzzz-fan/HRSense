@@ -7,6 +7,9 @@ public enum ConnectionState: Equatable, Sendable {
     case connecting
     case handshaking
     case connected
+    case restored
+    case restoredValidating
+    case restoredConnected
     case disconnecting
     case disconnected
 }
@@ -19,6 +22,9 @@ extension ConnectionState: CustomStringConvertible {
         case .connecting: "connecting"
         case .handshaking: "handshaking"
         case .connected: "connected"
+        case .restored: "restored"
+        case .restoredValidating: "restoredValidating"
+        case .restoredConnected: "restoredConnected"
         case .disconnecting: "disconnecting"
         case .disconnected: "disconnected"
         }

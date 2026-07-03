@@ -22,6 +22,10 @@
     <true/>
     <key>NSBluetoothAlwaysUsageDescription</key>
     <string>HRSense uses Bluetooth to discover and connect to the heart-rate device.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>bluetooth-central</string>
+	</array>
     <key>UIApplicationSceneManifest</key>
     <dict>
         <key>UIApplicationSupportsMultipleScenes</key>

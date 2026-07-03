@@ -15,11 +15,13 @@ final class FakeDeviceRepository: DeviceRepository, @unchecked Sendable {
     private let discCont: AsyncStream<DeviceInfo>.Continuation
     private let hrCont: AsyncStream<HeartRateSample>.Continuation
     private let devInfoCont: AsyncStream<DeviceInfo>.Continuation
+    private let restoreCont: AsyncStream<[UUID]>.Continuation
 
     let connectionStateStream: AsyncStream<ConnectionState>
     let discoveredDevicesStream: AsyncStream<DeviceInfo>
     let heartRateStream: AsyncStream<HeartRateSample>
     let deviceInfoStream: AsyncStream<DeviceInfo>
+    let restoredPeripheralIDsStream: AsyncStream<[UUID]>
 
     // Spy
     var scanCallCount = 0
@@ -42,6 +44,8 @@ final class FakeDeviceRepository: DeviceRepository, @unchecked Sendable {
         self.heartRateStream = AsyncStream { hc = $0 }; self.hrCont = hc!
         var dic: AsyncStream<DeviceInfo>.Continuation!
         self.deviceInfoStream = AsyncStream { dic = $0 }; self.devInfoCont = dic!
+        var ric: AsyncStream<[UUID]>.Continuation!
+        self.restoredPeripheralIDsStream = AsyncStream { ric = $0 }; self.restoreCont = ric!
     }
 
     func startScanning() async {
@@ -93,6 +97,10 @@ final class FakeDeviceRepository: DeviceRepository, @unchecked Sendable {
 
     func emitDeviceInfo(_ info: DeviceInfo) {
         devInfoCont.yield(info)
+    }
+
+    func emitRestoredPeripheralIDs(_ ids: [UUID]) {
+        restoreCont.yield(ids)
     }
 }
 

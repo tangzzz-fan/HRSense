@@ -82,6 +82,7 @@ struct PendingCommandTimeoutCoordinator {
 ///   0004 Info           — device→App readable metadata
 ///   0005 OTA Data       — App→device firmware image chunks (Write Without Response)
 public final class BLECentralDataSource: NSObject, @unchecked Sendable {
+    private let restoreIdentifier = "com.hrsense.ble-central-restore"
 
     // All CBUUID/CoreBluetooth state is isolated to bleQueue.
     private let bleQueue = DispatchQueue(label: "com.hrsense.app.ble")
@@ -105,6 +106,7 @@ public final class BLECentralDataSource: NSObject, @unchecked Sendable {
     private var connectionStateContinuation: AsyncStream<ConnectionState>.Continuation?
     private var discoveredDevicesContinuation: AsyncStream<DeviceInfo>.Continuation?
     private var heartRateContinuation: AsyncStream<HeartRateSample>.Continuation?
+    private var restoredPeripheralIDsContinuation: AsyncStream<[UUID]>.Continuation?
     private var commandResponseContinuation: CheckedContinuation<DecodedFrame, Error>?
     private var otaResponseContinuation: CheckedContinuation<OTACommand, Error>?
     private var expectedOTAResponseOpCodes: Set<OTAOpCode> = []
@@ -112,6 +114,7 @@ public final class BLECentralDataSource: NSObject, @unchecked Sendable {
     public let connectionStateStream: AsyncStream<ConnectionState>
     public let discoveredDevicesStream: AsyncStream<DeviceInfo>
     public let heartRateStream: AsyncStream<HeartRateSample>
+    public let restoredPeripheralIDsStream: AsyncStream<[UUID]>
     public let waveformRingBuffer: (any WaveformRingBufferProtocol)?
 
     public let dataParser = BLEDataParser()
@@ -148,9 +151,14 @@ public final class BLECentralDataSource: NSObject, @unchecked Sendable {
         self.discoveredDevicesStream = AsyncStream { dc = $0 }; self.discoveredDevicesContinuation = dc
         var hc: AsyncStream<HeartRateSample>.Continuation!
         self.heartRateStream = AsyncStream { hc = $0 }; self.heartRateContinuation = hc
+        var rc: AsyncStream<[UUID]>.Continuation!
+        self.restoredPeripheralIDsStream = AsyncStream { rc = $0 }; self.restoredPeripheralIDsContinuation = rc
         super.init()
         if bootstrapCentralManager {
-            _centralManager = CBCentralManager(delegate: self, queue: bleQueue)
+            let options: [String: Any] = [
+                CBCentralManagerOptionRestoreIdentifierKey: restoreIdentifier
+            ]
+            _centralManager = CBCentralManager(delegate: self, queue: bleQueue, options: options)
         }
     }
 
@@ -486,6 +494,24 @@ public final class BLECentralDataSource: NSObject, @unchecked Sendable {
 // MARK: - CBCentralManagerDelegate
 
 extension BLECentralDataSource: CBCentralManagerDelegate {
+    public func centralManager(_ central: CBCentralManager, willRestoreState dict: [String : Any]) {
+        guard let peripherals = dict[CBCentralManagerRestoredStatePeripheralsKey] as? [CBPeripheral],
+              !peripherals.isEmpty else {
+            return
+        }
+
+        for peripheral in peripherals {
+            peripheral.delegate = self
+        }
+
+        if let connectedPeripheral = peripherals.first(where: { $0.state == .connected || $0.state == .connecting }) {
+            _connectedPeripheral = connectedPeripheral
+        }
+
+        restoredPeripheralIDsContinuation?.yield(peripherals.map(\.identifier))
+        emitState(.restored)
+    }
+
     public func centralManagerDidUpdateState(_ central: CBCentralManager) {
         if central.state == .poweredOff { emitState(.disconnected) }
     }

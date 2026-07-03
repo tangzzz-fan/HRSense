@@ -29,6 +29,10 @@ public final class DeviceRepositoryImpl: DeviceRepository, @unchecked Sendable {
         bleDataSource.heartRateStream
     }
 
+    public var restoredPeripheralIDsStream: AsyncStream<[UUID]> {
+        bleDataSource.restoredPeripheralIDsStream
+    }
+
     public let deviceInfoStream: AsyncStream<DeviceInfo>
     private let deviceInfoContinuation: AsyncStream<DeviceInfo>.Continuation
 

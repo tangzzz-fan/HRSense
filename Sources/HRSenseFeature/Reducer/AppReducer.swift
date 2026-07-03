@@ -15,6 +15,27 @@ import HRSenseCore
 public enum AppReducer {
     public static func reduce(state: inout AppState, action: Action) {
         switch action {
+        case .didEnterBackground:
+            state.lifecycle = .background
+
+        case .willEnterForeground:
+            state.lifecycle = .active
+
+        case .restoreInitiated:
+            state.lifecycle = .restoring
+            state.connection = .restored
+            state.error = nil
+
+        case .restoreConnectionRestored:
+            state.lifecycle = .active
+            state.connection = .restoredConnected
+            state.error = nil
+
+        case .restoreFailed(let reason):
+            state.lifecycle = .active
+            state.connection = .disconnected
+            state.error = .handshakeFailed(reason: reason)
+
         case .startScanning:
             state.connection = .scanning
             state.discoveredDevices = []
