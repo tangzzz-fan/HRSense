@@ -65,6 +65,11 @@ public enum AppReducer {
             state.inference.latestResult = result
             state.inference.status = .completed
 
+        case .featuresExtracted:
+            // Feature vector is consumed by InferenceMiddleware for CoreML input.
+            // No state change needed — this is a signalling action.
+            break
+
         case .otaStateChanged(let ota):
             state.ota = ota
 

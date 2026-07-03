@@ -27,6 +27,7 @@ public enum Action: Equatable, Sendable {
 
     // MARK: Inference (M8 full impl)
     case inferenceCompleted(InferenceResult)
+    case featuresExtracted(FeatureVector)  // M8: intermediate step — 14 features extracted
 
     // MARK: OTA (M6 full impl)
     case otaStateChanged(OTAState)
@@ -60,6 +61,7 @@ extension Action: CustomStringConvertible {
         case .deviceEvent: return "deviceEvent"
         case .hrvComputed: return "hrvComputed"
         case .inferenceCompleted: return "inferenceCompleted"
+        case .featuresExtracted: return "featuresExtracted"
         case .otaStateChanged(let o): return "otaStateChanged(\(o.phase))"
         case .waveformSamplesReceived(let s): return "waveformSamplesReceived(\(s.count) samples)"
         case .waveformMetricsUpdated: return "waveformMetricsUpdated"
