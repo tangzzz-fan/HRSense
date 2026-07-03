@@ -142,4 +142,38 @@ final class ReducerTests: XCTestCase {
         AppReducer.reduce(state: &state, action: .deviceInfoUpdated(device))
         XCTAssertEqual(state.device, device)
     }
+
+    // MARK: - Waveform
+
+    func test_waveformSamplesReceived_appendsSamples() {
+        var state = AppState()
+        let sample = WaveformSample(type: .ecg, sampleRateHz: 128, timestamp: Date(), value: 0.5)
+        AppReducer.reduce(state: &state, action: .waveformSamplesReceived([sample]))
+        XCTAssertEqual(state.waveform.ecgSamples.count, 1)
+        XCTAssertTrue(state.waveform.isStreaming)
+    }
+
+    func test_waveformMetricsUpdated_updatesMetrics() {
+        var state = AppState()
+        var metrics = WaveformMetrics()
+        metrics.mtu = 247
+        AppReducer.reduce(state: &state, action: .waveformMetricsUpdated(metrics))
+        XCTAssertEqual(state.waveform.metrics.mtu, 247)
+    }
+
+    func test_waveformTypeSelected_updatesType() {
+        var state = AppState()
+        AppReducer.reduce(state: &state, action: .waveformTypeSelected(.ppg))
+        XCTAssertEqual(state.waveform.selectedType, .ppg)
+    }
+
+    // MARK: - Feature vector
+
+    func test_featuresExtracted_isNoOp() {
+        var state = AppState()
+        let fv = FeatureVector(values: Array(repeating: 0, count: 14))
+        AppReducer.reduce(state: &state, action: .featuresExtracted(fv))
+        // State unchanged — featuresExtracted is a signalling action
+        XCTAssertEqual(state.connection, .idle)
+    }
 }
