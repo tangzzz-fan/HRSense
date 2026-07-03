@@ -15,14 +15,14 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		A20000062FF8000000000006 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+		A20000062FF8000000000006 /* Exceptions for "HRSenseApp" folder in "HRSenseApp" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
 			);
 			target = 1817510B2FF744B000072403 /* HRSenseApp */;
 		};
-		A20000072FF8000000000007 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+		A20000072FF8000000000007 /* Exceptions for "../../Models" folder in "HRSenseApp" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				.gitkeep,
@@ -35,15 +35,15 @@
 		1817510E2FF744B000072403 /* HRSenseApp */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				A20000062FF8000000000006 /* PBXFileSystemSynchronizedBuildFileExceptionSet */,
+				A20000062FF8000000000006 /* Exceptions for "HRSenseApp" folder in "HRSenseApp" target */,
 			);
 			path = HRSenseApp;
 			sourceTree = "<group>";
 		};
-		A20000082FF8000000000008 /* Models */ = {
+		A20000082FF8000000000008 /* ../../Models */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				A20000072FF8000000000007 /* PBXFileSystemSynchronizedBuildFileExceptionSet */,
+				A20000072FF8000000000007 /* Exceptions for "../../Models" folder in "HRSenseApp" target */,
 			);
 			path = ../../Models;
 			sourceTree = "<group>";
@@ -66,7 +66,7 @@
 			isa = PBXGroup;
 			children = (
 				1817510E2FF744B000072403 /* HRSenseApp */,
-				A20000082FF8000000000008 /* Models */,
+				A20000082FF8000000000008 /* ../../Models */,
 				1817510D2FF744B000072403 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -96,7 +96,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				1817510E2FF744B000072403 /* HRSenseApp */,
-				A20000082FF8000000000008 /* Models */,
+				A20000082FF8000000000008 /* ../../Models */,
 			);
 			name = HRSenseApp;
 			packageProductDependencies = (
@@ -130,13 +130,13 @@
 			);
 			mainGroup = 181751032FF744B000072403;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				A20000042FF8000000000004 /* XCLocalSwiftPackageReference "../.." */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 1817510D2FF744B000072403 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
-			packageReferences = (
-				A20000042FF8000000000004 /* XCLocalSwiftPackageReference "../.." */,
-			);
 			targets = (
 				1817510B2FF744B000072403 /* HRSenseApp */,
 			);
@@ -162,21 +162,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
-
-/* Begin XCLocalSwiftPackageReference section */
-		A20000042FF8000000000004 /* XCLocalSwiftPackageReference "../.." */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = ../..;
-		};
-/* End XCLocalSwiftPackageReference section */
-
-/* Begin XCSwiftPackageProductDependency section */
-		A20000032FF8000000000003 /* HRSenseAppUI */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = A20000042FF8000000000004 /* XCLocalSwiftPackageReference "../.." */;
-			productName = HRSenseAppUI;
-		};
-/* End XCSwiftPackageProductDependency section */
 
 /* Begin XCBuildConfiguration section */
 		181751152FF744B200072403 /* Debug */ = {
@@ -380,6 +365,21 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		A20000042FF8000000000004 /* XCLocalSwiftPackageReference "../.." */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../..;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		A20000032FF8000000000003 /* HRSenseAppUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A20000042FF8000000000004 /* XCLocalSwiftPackageReference "../.." */;
+			productName = HRSenseAppUI;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 181751042FF744B000072403 /* Project object */;
 }

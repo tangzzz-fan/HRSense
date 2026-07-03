@@ -6,6 +6,47 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Implementation phase.** The repo now contains a real SwiftPM codebase, two App shells under `Apps/`, and a root `HRSense.xcworkspace`. Design docs are still the source of truth for architecture and protocol contracts, but build/test validation must use the live codebase and the workspace-backed app shells.
 
+## M1-M8 Alignment
+
+This section tracks the live implementation state against `docs/11-delivery-plan.md` and is the default execution checklist for ongoing coding work. Status labels:
+- `implemented`: code path exists and is broadly closed in the current repo
+- `partial`: major skeleton exists, but acceptance criteria are not yet fully closed
+- `pending-validation`: implementation exists, but milestone-level validation evidence is still missing
+
+### Current Alignment Snapshot (2026-07-03)
+
+| Milestone | Status | Current reality in repo | Primary remaining gaps before acceptance |
+|---|---|---|---|
+| M1 Protocol | `partial` | `HRSenseProtocol` has framing, codecs, CRC16/CRC32, waveform and OTA codecs, logging facade, and protocol tests. | `TLVDecoder` does not preserve unknown tags as promised by the plan; HELLO capability negotiation payload is incomplete on the App side; milestone coverage/acceptance evidence is not yet recorded. |
+| M2 Simulator MVP | `pending-validation` | `HRSenseSimulatorKit` includes generators, command processor, BLE peripheral wrapper, scenarios, headless runner, and tests. | Need explicit acceptance evidence for LightBlue/nRF verification and scripted headless scenario validation against `docs/11`. |
+| M3 App BLE | `partial` | iOS App can connect to the macOS peripheral again, and the M3/M19 connection loop is functionally repaired in code. `HRSenseData` contains the central wrapper, parser, repository, connection state machine, and stream handling. The app shell now has an explicit `AppComposition.swift` composition root, and HELLO capability negotiation is wired on the App side. | Acceptance items such as 10-minute stability, 5% packet-loss accounting, and milestone evidence are not closed yet. |
+| M4 Redux UI | `partial` | `HRSenseFeature` contains State/Action/Reducer/Middleware and a working `RootView`. The Data→Feature wiring is now centralized via `AppComposition.swift`. | The plan's dedicated debug/presentation artifacts are still simplified into `RootView`; UI acceptance and middleware/reducer evidence still need explicit closure. |
+| M5 Waveform | `partial` | Protocol, simulator, ring buffer, middleware, and waveform views all exist. | Need milestone-level closure for high-throughput validation, ECG/PPG state separation and metrics completeness, MTU/throughput evidence, and long-run rendering acceptance. |
+| M6 OTA | `partial` | OTA protocol, simulator OTA state machine, repository, middleware, and UI shell exist. | App OTA flow still simulates window ACK gating with timed sleep instead of a real notify-driven flow-control loop; resume/CRC/retry/validation paths are not yet closed to `docs/11` acceptance level. |
+| M7 Observability | `partial` | Logging facade, logging middleware, MetricKit manager, metrics collector, and diagnostics UI shell exist. | Diagnostic panel still contains placeholder data refresh/export behavior; MetricKit persistence/export linkage is incomplete; milestone acceptance evidence is missing. |
+| M8 Compute/CoreML | `partial` | C ABI bridge, C++ compute target, CoreML service, placeholder model, repositories, and middleware are in place. | No golden-value validation against reference HRV outputs yet; some compute logic remains placeholder-grade; end-to-end acceptance for 5 min / 30 s pipeline timing is not yet documented. |
+
+### Execution Priority (Next)
+
+1. Close M6 OTA transport debt:
+   - replace sleep-based window gating with actual notify/ACK-driven flow control
+2. Close M7 diagnostics debt:
+   - wire `DiagnosticPanelView` to live `MetricsCollector`
+   - support real diagnostic export
+3. Close M8 compute validation debt:
+   - add reference-vector/golden-value verification for HRV metrics
+4. Close M1 protocol conformance debt:
+   - preserve unknown TLV tags or narrow the contract/documentation to the implemented behavior
+
+### Working Rule For Ongoing Implementation
+
+When filling gaps from M1-M8, prefer this order unless the user asks otherwise:
+1. protocol correctness
+2. composition and dependency wiring
+3. transport reliability
+4. observability
+5. acceptance and regression evidence
+
 ## Commands
 
 Use these commands as the default validation entry points:

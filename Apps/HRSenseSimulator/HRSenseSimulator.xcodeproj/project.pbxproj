@@ -16,11 +16,10 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		A30000062FF8000000000006 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+		A30000062FF8000000000006 /* Exceptions for "HRSenseSimulator" folder in "HRSenseSimulator" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
-				HRSenseSimulator.entitlements,
 			);
 			target = 181751302FF7453600072403 /* HRSenseSimulator */;
 		};
@@ -30,7 +29,7 @@
 		181751332FF7453600072403 /* HRSenseSimulator */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				A30000062FF8000000000006 /* PBXFileSystemSynchronizedBuildFileExceptionSet */,
+				A30000062FF8000000000006 /* Exceptions for "HRSenseSimulator" folder in "HRSenseSimulator" target */,
 			);
 			path = HRSenseSimulator;
 			sourceTree = "<group>";
@@ -117,13 +116,13 @@
 			);
 			mainGroup = 181751282FF7453600072403;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				A30000042FF8000000000004 /* XCLocalSwiftPackageReference "../.." */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 181751322FF7453600072403 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
-			packageReferences = (
-				A30000042FF8000000000004 /* XCLocalSwiftPackageReference "../.." */,
-			);
 			targets = (
 				181751302FF7453600072403 /* HRSenseSimulator */,
 			);
@@ -149,26 +148,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
-
-/* Begin XCLocalSwiftPackageReference section */
-		A30000042FF8000000000004 /* XCLocalSwiftPackageReference "../.." */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = ../..;
-		};
-/* End XCLocalSwiftPackageReference section */
-
-/* Begin XCSwiftPackageProductDependency section */
-		A30000032FF8000000000003 /* HRSenseSimulatorUI */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = A30000042FF8000000000004 /* XCLocalSwiftPackageReference "../.." */;
-			productName = HRSenseSimulatorUI;
-		};
-		A30000052FF8000000000005 /* HRSenseSimulatorKit */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = A30000042FF8000000000004 /* XCLocalSwiftPackageReference "../.." */;
-			productName = HRSenseSimulatorKit;
-		};
-/* End XCSwiftPackageProductDependency section */
 
 /* Begin XCBuildConfiguration section */
 		1817513A2FF7453900072403 /* Debug */ = {
@@ -296,6 +275,8 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = HRSenseSimulator/HRSenseSimulator.entitlements;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
@@ -304,7 +285,6 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
-				CODE_SIGN_ENTITLEMENTS = HRSenseSimulator/HRSenseSimulator.entitlements;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = HRSenseSimulator/Info.plist;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -330,6 +310,8 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = HRSenseSimulator/HRSenseSimulator.entitlements;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
@@ -338,7 +320,6 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
-				CODE_SIGN_ENTITLEMENTS = HRSenseSimulator/HRSenseSimulator.entitlements;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = HRSenseSimulator/Info.plist;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -381,6 +362,26 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		A30000042FF8000000000004 /* XCLocalSwiftPackageReference "../.." */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../..;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		A30000032FF8000000000003 /* HRSenseSimulatorUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A30000042FF8000000000004 /* XCLocalSwiftPackageReference "../.." */;
+			productName = HRSenseSimulatorUI;
+		};
+		A30000052FF8000000000005 /* HRSenseSimulatorKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A30000042FF8000000000004 /* XCLocalSwiftPackageReference "../.." */;
+			productName = HRSenseSimulatorKit;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 181751292FF7453600072403 /* Project object */;
 }

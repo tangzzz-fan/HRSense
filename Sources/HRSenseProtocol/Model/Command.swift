@@ -62,11 +62,14 @@ extension Command {
         capabilities: Capabilities,
         needsACK: Bool = false
     ) -> Command {
-        Command(
+        var capsLE = capabilities.rawValue.littleEndian
+        let capsBytes = Swift.withUnsafeBytes(of: &capsLE) { Array($0) }
+        return Command(
             opCode: .hello,
             flags: CommandFlags(isResponse: false, needsACK: needsACK),
             params: [
                 TLVRecord(tag: .heartRate, value: versions),  // reuse tag 0x01 for versions list in HELLO
+                TLVRecord(tag: .capabilities, value: capsBytes),
             ]
         )
     }

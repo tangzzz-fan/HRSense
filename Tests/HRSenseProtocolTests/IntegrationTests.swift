@@ -19,6 +19,7 @@ final class IntegrationTests: XCTestCase {
         }
         XCTAssertEqual(decoded.opCode, .hello)
         XCTAssertEqual(decoded.flags.isResponse, false)
+        XCTAssertEqual(decoded.params.first(where: { $0.tag == .capabilities })?.value, [0x01, 0x00, 0x00, 0x00])
     }
 
     func test_dataE2E() {

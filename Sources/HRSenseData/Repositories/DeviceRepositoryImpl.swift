@@ -106,6 +106,13 @@ public final class DeviceRepositoryImpl: DeviceRepository, @unchecked Sendable {
             switch param.tag {
             case .heartRate:  // tag 0x01 reused for protocol version
                 if let v = param.value.first { version = v }
+            case .capabilities:
+                let bytes = Array(param.value.prefix(4))
+                var rawValue: UInt32 = 0
+                for (index, byte) in bytes.enumerated() {
+                    rawValue |= UInt32(byte) << (index * 8)
+                }
+                caps = Capabilities(rawValue: rawValue)
             case .battery:    // tag 0x04 reused for model name
                 model = String(bytes: param.value, encoding: .utf8) ?? ""
             case .sensorStatus:  // tag 0x05 reused for fw version
@@ -114,7 +121,6 @@ public final class DeviceRepositoryImpl: DeviceRepository, @unchecked Sendable {
                 break
             }
         }
-        caps = Capabilities(rawValue: UInt32((ack.params.first(where: { $0.tag == .capabilities })?.value.first) ?? 0) | caps.rawValue)
 
         let peripheralIdentifier = bleDataSource.connectedPeripheralIdentifier ?? UUID()
         let connectedDeviceName = bleDataSource.connectedDeviceInfo?.name ?? "HRSense Peripheral"
