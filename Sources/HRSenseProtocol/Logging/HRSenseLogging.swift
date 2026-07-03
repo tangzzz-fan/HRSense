@@ -55,7 +55,7 @@ public enum HRSenseLogLevel: Int, Sendable, Comparable {
 public final class LogFilter: @unchecked Sendable {
     private let lock = NSLock()
     private var categoryStates: [HRSenseLogCategory: Bool] = [:]
-    public var minimumLevel: HRSenseLogLevel = .debug
+    private var _minimumLevel: HRSenseLogLevel = .debug
 
     public init(enabledByDefault: Bool = true) {
         for cat in HRSenseLogCategory.allCases {
@@ -65,12 +65,24 @@ public final class LogFilter: @unchecked Sendable {
 
     public func isEnabled(_ category: HRSenseLogCategory, level: HRSenseLogLevel) -> Bool {
         lock.withLock {
-            (categoryStates[category] ?? true) && level >= minimumLevel
+            (categoryStates[category] ?? true) && level >= _minimumLevel
         }
     }
 
     public func setEnabled(_ category: HRSenseLogCategory, enabled: Bool) {
         lock.withLock { categoryStates[category] = enabled }
+    }
+
+    public func isCategoryEnabled(_ category: HRSenseLogCategory) -> Bool {
+        lock.withLock { categoryStates[category] ?? true }
+    }
+
+    public var minimumLevel: HRSenseLogLevel {
+        lock.withLock { _minimumLevel }
+    }
+
+    public func setMinimumLevel(_ level: HRSenseLogLevel) {
+        lock.withLock { _minimumLevel = level }
     }
 
     public func enableAll() {
@@ -118,6 +130,7 @@ public struct NoOpLogger: HRSenseLogger, Sendable {
 public final class LoggingRegistry: @unchecked Sendable {
     private var _logger: HRSenseLogger = NoOpLogger()
     private var _filter: LogFilter = LogFilter()
+    private var _ringBuffer: LogRingBuffer = LogRingBuffer()
     private let lock = NSLock()
 
     public var logger: HRSenseLogger {
@@ -129,6 +142,10 @@ public final class LoggingRegistry: @unchecked Sendable {
         get { lock.withLock { _filter } }
     }
 
+    public var ringBuffer: LogRingBuffer {
+        get { lock.withLock { _ringBuffer } }
+    }
+
     public static let shared = LoggingRegistry()
 
     private init() {}
@@ -137,25 +154,36 @@ public final class LoggingRegistry: @unchecked Sendable {
 // MARK: - Convenience API
 
 public enum HRSenseLogging {
+    private static func record(_ level: HRSenseLogLevel, category: HRSenseLogCategory, _ message: String) {
+        LoggingRegistry.shared.ringBuffer.append(
+            LogEntry(
+                category: category.rawValue,
+                level: String(describing: level).uppercased(),
+                message: message
+            )
+        )
+        LoggingRegistry.shared.logger.log(level, category: category, message)
+    }
+
     public static func debug(_ category: HRSenseLogCategory, _ message: @autoclosure () -> String) {
-        LoggingRegistry.shared.logger.log(.debug, category: category, message())
+        record(.debug, category: category, message())
     }
     public static func info(_ category: HRSenseLogCategory, _ message: @autoclosure () -> String) {
-        LoggingRegistry.shared.logger.log(.info, category: category, message())
+        record(.info, category: category, message())
     }
     public static func notice(_ category: HRSenseLogCategory, _ message: @autoclosure () -> String) {
-        LoggingRegistry.shared.logger.log(.notice, category: category, message())
+        record(.notice, category: category, message())
     }
     public static func error(_ category: HRSenseLogCategory, _ message: @autoclosure () -> String) {
-        LoggingRegistry.shared.logger.log(.error, category: category, message())
+        record(.error, category: category, message())
     }
     public static func fault(_ category: HRSenseLogCategory, _ message: @autoclosure () -> String) {
-        LoggingRegistry.shared.logger.log(.fault, category: category, message())
+        record(.fault, category: category, message())
     }
 
     /// Legacy compatibility
     public static func warn(_ category: HRSenseLogCategory, _ message: @autoclosure () -> String) {
-        LoggingRegistry.shared.logger.log(.error, category: category, message())
+        record(.error, category: category, message())
     }
 
     /// Activate the OSLog-backed logger (call once at app startup).

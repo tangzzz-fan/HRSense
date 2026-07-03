@@ -19,6 +19,7 @@ public final class OTARepositoryImpl: OTARepository, @unchecked Sendable {
     private let waitForOTAWindowAck: (TimeInterval) async throws -> OTACommand
     private let sendOTAChunk: (Data) -> Void
     private let imageData: () -> Data
+    private let metricsCollector: MetricsCollector?
 
     private var progressContinuation: AsyncStream<OTAProgress>.Continuation?
     private var shouldAbort = false
@@ -37,13 +38,15 @@ public final class OTARepositoryImpl: OTARepository, @unchecked Sendable {
         sendOTAControlAndWait: @escaping (OTACommand, TimeInterval) async throws -> OTACommand,
         waitForOTAWindowAck: @escaping (TimeInterval) async throws -> OTACommand,
         sendOTAChunk: @escaping (Data) -> Void,
-        imageData: @escaping () -> Data
+        imageData: @escaping () -> Data,
+        metricsCollector: MetricsCollector? = nil
     ) {
         self.sendOTAControl = sendOTAControl
         self.sendOTAControlAndWait = sendOTAControlAndWait
         self.waitForOTAWindowAck = waitForOTAWindowAck
         self.sendOTAChunk = sendOTAChunk
         self.imageData = imageData
+        self.metricsCollector = metricsCollector
         var cont: AsyncStream<OTAProgress>.Continuation!
         self.progressStream = AsyncStream { cont = $0 }
         self.progressContinuation = cont
@@ -52,6 +55,7 @@ public final class OTARepositoryImpl: OTARepository, @unchecked Sendable {
     /// Start an OTA firmware update.
     public func startOTA(image: OTAFirmwareImage) async throws {
         shouldAbort = false
+        metricsCollector?.recordOTAAttempt()
         emit(.preparing, progress: 0)
 
         let fullImage = imageData()
@@ -184,6 +188,7 @@ public final class OTARepositoryImpl: OTARepository, @unchecked Sendable {
         _ = try await sendOTAControlAndWait(applyCmd, 5.0)
 
         HRSenseLogging.info(.ota, "OTA complete — new version=\(image.newVersion)")
+        metricsCollector?.recordOTASuccess()
         emit(.completed(newVersion: image.newVersion))
     }
 

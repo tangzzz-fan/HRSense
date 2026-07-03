@@ -49,6 +49,7 @@ public final class DeviceRepositoryImpl: DeviceRepository, @unchecked Sendable {
     }
 
     public func connect(to deviceID: UUID) async throws {
+        metricsCollector.recordConnectionAttempt()
         bleDataSource.connect(to: deviceID)
     }
 
@@ -136,6 +137,7 @@ public final class DeviceRepositoryImpl: DeviceRepository, @unchecked Sendable {
         )
         bleDataSource.dataParser.markT0()
         deviceInfoContinuation.yield(deviceInfo)
+        metricsCollector.recordConnectionSuccess()
         HRSenseLogging.info(.protoCmd, "HANDSHAKE: device=\(model) fw=\(fw) version=\(version) caps=0x\(String(caps.rawValue, radix: 16))")
 
         // Step 3: Send START_STREAM

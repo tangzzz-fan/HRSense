@@ -12,15 +12,8 @@ import HRSenseProtocol
 ///   3. MetricKit diagnostics (crash/hang/CPU exceptions)
 ///   4. Diagnostic export (JSON → Share sheet)
 public struct DiagnosticPanelView: View {
-    @State private var kpi: KPISnapshot = KPISnapshot(
-        connectionSuccessRate: 0, reconnectCount: 0, commandTimeoutRate: 0,
-        sampleLossRate: 0, throughputBytesPerSec: 0, otaSuccessRate: 0
-    )
+    @EnvironmentObject private var model: DiagnosticPanelModel
     @State private var logCategories: [HRSenseLogCategory: Bool] = [:]
-    @State private var minimumLevel: HRSenseLogLevel = .debug
-    @State private var crashHistory: [String] = []
-    @State private var isExporting = false
-
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     public init() {}
@@ -30,63 +23,85 @@ public struct DiagnosticPanelView: View {
             List {
                 // Section 1: KPIs
                 Section("Real-time Metrics") {
-                    kpiRow("Connection Rate", String(format: "%.0f%%", kpi.connectionSuccessRate * 100))
-                    kpiRow("Reconnects", "\(kpi.reconnectCount)")
-                    kpiRow("Cmd Timeout Rate", String(format: "%.1f%%", kpi.commandTimeoutRate * 100))
-                    kpiRow("Sample Loss Rate", String(format: "%.1f%%", kpi.sampleLossRate * 100))
+                    kpiRow("Connection Rate", String(format: "%.0f%%", model.kpi.connectionSuccessRate * 100))
+                    kpiRow("Reconnects", "\(model.kpi.reconnectCount)")
+                    kpiRow("Cmd Timeout Rate", String(format: "%.1f%%", model.kpi.commandTimeoutRate * 100))
+                    kpiRow("Sample Loss Rate", String(format: "%.1f%%", model.kpi.sampleLossRate * 100))
                     kpiRow("Throughput", throughputLabel)
-                    kpiRow("OTA Success Rate", String(format: "%.0f%%", kpi.otaSuccessRate * 100))
+                    kpiRow("OTA Success Rate", String(format: "%.0f%%", model.kpi.otaSuccessRate * 100))
                 }
 
                 // Section 2: Log toggles
                 Section("Log Categories") {
                     ForEach(Array(logCategories.keys.sorted(by: { $0.rawValue < $1.rawValue })), id: \.rawValue) { cat in
                         Toggle(cat.rawValue, isOn: Binding(
-                            get: { logCategories[cat] ?? true },
-                            set: { LoggingRegistry.shared.filter.setEnabled(cat, enabled: $0) }
+                            get: { logCategories[cat] ?? LoggingRegistry.shared.filter.isCategoryEnabled(cat) },
+                            set: {
+                                logCategories[cat] = $0
+                                LoggingRegistry.shared.filter.setEnabled(cat, enabled: $0)
+                            }
                         ))
                     }
-                    Picker("Min Level", selection: $minimumLevel) {
+                    Picker(
+                        "Min Level",
+                        selection: Binding(
+                            get: { LoggingRegistry.shared.filter.minimumLevel },
+                            set: { LoggingRegistry.shared.filter.setMinimumLevel($0) }
+                        )
+                    ) {
                         Text("Debug").tag(HRSenseLogLevel.debug)
                         Text("Info").tag(HRSenseLogLevel.info)
                         Text("Notice").tag(HRSenseLogLevel.notice)
                         Text("Error").tag(HRSenseLogLevel.error)
                     }
                     HStack {
-                        Button("All On") { LoggingRegistry.shared.filter.enableAll() }
+                        Button("All On") {
+                            LoggingRegistry.shared.filter.enableAll()
+                            for cat in HRSenseLogCategory.allCases {
+                                logCategories[cat] = true
+                            }
+                        }
                         Spacer()
-                        Button("All Off") { LoggingRegistry.shared.filter.disableAll() }
+                        Button("All Off") {
+                            LoggingRegistry.shared.filter.disableAll()
+                            for cat in HRSenseLogCategory.allCases {
+                                logCategories[cat] = false
+                            }
+                        }
                     }
                 }
 
                 // Section 3: MetricKit diagnostics
                 Section("MetricKit Diagnostics") {
-                    if crashHistory.isEmpty {
+                    if model.crashHistory.isEmpty {
                         Text("No diagnostics recorded").foregroundColor(.secondary)
                     } else {
-                        ForEach(crashHistory, id: \.self) { entry in
+                        ForEach(model.crashHistory, id: \.self) { entry in
                             Text(entry).font(.caption2)
                         }
                     }
                     Button("Inject Test Crash") {
-                        // Record state before crash
-                        let transitions = StateTransitionRecorder.shared.recentTransitions
-                        crashHistory.append("Test crash @ \(Date())\nRecent: \(transitions.joined(separator: "\n"))")
+                        model.injectTestCrashRecord()
                     }
                     Button("Inject Test Hang") {
-                        let info = "HANG: test hang recorded @ \(Date())"
-                        crashHistory.append(info)
+                        model.injectTestHangRecord()
                     }
                 }
 
                 // Section 4: Export
                 Section("Diagnostic Export") {
                     Button("Export Diagnostic Package") {
-                        isExporting = true
+                        model.exportDiagnosticPackage()
                     }
-                    .sheet(isPresented: $isExporting) {
-                        Text("Export requires a platform share sheet host.")
-                            .padding()
+                    if let exportStatusMessage = model.exportStatusMessage {
+                        Text(exportStatusMessage)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    if let exportURL = model.exportURL {
+                        ShareLink(item: exportURL) {
+                            Label("Share Latest Package", systemImage: "square.and.arrow.up")
+                        }
                     }
                 }
             }
@@ -97,8 +112,9 @@ public struct DiagnosticPanelView: View {
         }
         .onAppear {
             for cat in HRSenseLogCategory.allCases {
-                logCategories[cat] = true
+                logCategories[cat] = LoggingRegistry.shared.filter.isCategoryEnabled(cat)
             }
+            refreshMetrics()
         }
     }
 
@@ -111,16 +127,15 @@ public struct DiagnosticPanelView: View {
     }
 
     private var throughputLabel: String {
-        if kpi.throughputBytesPerSec > 1024 {
-            String(format: "%.1f KB/s", kpi.throughputBytesPerSec / 1024)
+        if model.kpi.throughputBytesPerSec > 1024 {
+            String(format: "%.1f KB/s", model.kpi.throughputBytesPerSec / 1024)
         } else {
-            String(format: "%.0f B/s", kpi.throughputBytesPerSec)
+            String(format: "%.0f B/s", model.kpi.throughputBytesPerSec)
         }
     }
 
     private func refreshMetrics() {
-        // In a real setup, this would pull from the live MetricsCollector.
-        // M7: panell reads from a shared MetricsCollector injected via environment.
+        model.refresh()
     }
 }
 

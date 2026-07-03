@@ -244,6 +244,7 @@ public final class BLECentralDataSource: NSObject, @unchecked Sendable {
                 }
 
                 let identity = self._pendingCommandCoordinator.register(opcode: command.opCode.rawValue)
+                self.metricsCollector.recordCommandSent()
 
                 // Register the continuation — the next command/ack/event on notify will resume it.
                 self.commandResponseContinuation = cont
@@ -264,6 +265,7 @@ public final class BLECentralDataSource: NSObject, @unchecked Sendable {
                     guard let existing = self.commandResponseContinuation else { return }
                     self._pendingCommandCoordinator.clear(identity)
                     self.commandResponseContinuation = nil
+                    self.metricsCollector.recordCommandTimeout()
                     existing.resume(throwing: AppError.commandTimeout(opcode: identity.opcode))
                 }
             }
@@ -311,6 +313,7 @@ public final class BLECentralDataSource: NSObject, @unchecked Sendable {
 
                 self.otaResponseContinuation = continuation
                 self.expectedOTAResponseOpCodes = [expectedOpCode]
+                self.metricsCollector.recordCommandSent()
 
                 HRSenseLogging.debug(.ota, "WRITE(0003) OTA opcode=0x\(String(command.opCode.rawValue, radix: 16)) wait=0x\(String(expectedOpCode.rawValue, radix: 16))")
                 peripheral.writeValue(payload, for: writeChar, type: .withResponse)
@@ -321,6 +324,7 @@ public final class BLECentralDataSource: NSObject, @unchecked Sendable {
                     guard !self.expectedOTAResponseOpCodes.isEmpty else { return }
                     self.otaResponseContinuation = nil
                     self.expectedOTAResponseOpCodes = []
+                    self.metricsCollector.recordCommandTimeout()
                     pending.resume(throwing: AppError.commandTimeout(opcode: command.opCode.rawValue))
                 }
             }
@@ -338,6 +342,7 @@ public final class BLECentralDataSource: NSObject, @unchecked Sendable {
 
                 self.otaResponseContinuation = continuation
                 self.expectedOTAResponseOpCodes = [.otaWindowAck]
+                self.metricsCollector.recordCommandSent()
 
                 self.bleQueue.asyncAfter(deadline: .now() + timeout) { [weak self] in
                     guard let self else { return }
@@ -345,6 +350,7 @@ public final class BLECentralDataSource: NSObject, @unchecked Sendable {
                     guard self.expectedOTAResponseOpCodes == [.otaWindowAck] else { return }
                     self.otaResponseContinuation = nil
                     self.expectedOTAResponseOpCodes = []
+                    self.metricsCollector.recordCommandTimeout()
                     pending.resume(throwing: AppError.commandTimeout(opcode: OTAOpCode.otaWindowAck.rawValue))
                 }
             }

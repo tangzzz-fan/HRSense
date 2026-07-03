@@ -9,8 +9,13 @@ import TGReduxKit
 /// Owns dependency wiring between Data and Feature layers so that Views stay
 /// focused on presentation instead of constructing repositories and middleware.
 public enum AppComposition {
+    public struct AppShell {
+        public let store: Store<AppState, Action>
+        public let diagnosticPanelModel: DiagnosticPanelModel
+    }
+
     @MainActor
-    public static func makeStore() -> Store<AppState, Action> {
+    public static func makeAppShell() -> AppShell {
         HRSenseLogging.activateOSLog()
 
         let waveformBuffer = WaveformRingBuffer()
@@ -35,7 +40,8 @@ public enum AppComposition {
             sendOTAChunk: { [bleDataSource] chunk in
                 bleDataSource.sendOTAChunk(chunk)
             },
-            imageData: { Data() }  // Firmware bytes are injected later during real OTA integration.
+            imageData: { Data() },  // Firmware bytes are injected later during real OTA integration.
+            metricsCollector: deviceRepo.metricsCollector
         )
 
         let middleware: [Middleware<AppState, Action>] = [
@@ -53,10 +59,36 @@ public enum AppComposition {
             makeOTAMiddleware(otaRepo: otaRepo),
         ]
 
-        return Store(
+        let store = Store(
             initialState: AppState(),
             reducer: AppReducer.reduce,
             middlewares: middleware
         )
+
+        let diagnosticPanelModel = DiagnosticPanelModel(
+            dependencies: DiagnosticPanelDependencies(
+                kpiSnapshotProvider: { deviceRepo.metricsCollector.kpiSnapshot() },
+                logEntriesProvider: { LoggingRegistry.shared.ringBuffer.snapshot() },
+                stateTransitionsProvider: { StateTransitionRecorder.shared.recentTransitions },
+                metricDiagnosticsProvider: { MetricKitManager.shared.recentDiagnostics },
+                metricsSnapshotProvider: {
+                    let snapshot = deviceRepo.metricsCollector.snapshot()
+                    return MetricsSnapshotJSON(
+                        totalSamplesReceived: snapshot.totalSamplesReceived,
+                        samplesLost: snapshot.samplesLost,
+                        reconnectCount: snapshot.reconnectCount,
+                        bytesReceived: snapshot.bytesReceived
+                    )
+                },
+                systemInfoProvider: { SystemInfo.current }
+            )
+        )
+
+        return AppShell(store: store, diagnosticPanelModel: diagnosticPanelModel)
+    }
+
+    @MainActor
+    public static func makeStore() -> Store<AppState, Action> {
+        makeAppShell().store
     }
 }

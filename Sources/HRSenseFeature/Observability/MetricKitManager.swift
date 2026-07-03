@@ -11,6 +11,8 @@ public final class MetricKitManager: NSObject, @unchecked Sendable {
 
     /// Callback: invoked when a new diagnostic payload is received.
     public var onDiagnosticReceived: ((String, [String]) -> Void)?
+    private let lock = NSLock()
+    private var diagnosticsHistory: [String] = []
 
     private override init() {
         super.init()
@@ -19,6 +21,22 @@ public final class MetricKitManager: NSObject, @unchecked Sendable {
 
     deinit {
         MXMetricManager.shared.remove(self)
+    }
+
+    public var recentDiagnostics: [String] {
+        lock.withLock { diagnosticsHistory }
+    }
+
+    public func recordDebugDiagnostic(_ info: String, transitions: [String]) {
+        let entry = ([info] + transitions.prefix(5)).joined(separator: "\n")
+        lock.withLock { diagnosticsHistory.append(entry) }
+        onDiagnosticReceived?(info, transitions)
+    }
+
+    private func appendDiagnostic(_ info: String, transitions: [String]) {
+        let entry = ([info] + transitions.prefix(5)).joined(separator: "\n")
+        lock.withLock { diagnosticsHistory.append(entry) }
+        onDiagnosticReceived?(info, transitions)
     }
 }
 
@@ -35,7 +53,7 @@ extension MetricKitManager: MXMetricManagerSubscriber {
                     let reason = crash.terminationReason ?? "unknown"
                     let info = "CRASH: reason=\(reason)"
                     HRSenseLogging.fault(.state, info)
-                    onDiagnosticReceived?(info, transitions)
+                    appendDiagnostic(info, transitions: transitions)
                 }
             }
 
@@ -44,14 +62,14 @@ extension MetricKitManager: MXMetricManagerSubscriber {
                     let duration = hang.hangDuration.value / 1_000_000_000.0
                     let info = "HANG: duration=\(String(format: "%.1f", duration))s"
                     HRSenseLogging.error(.state, info)
-                    onDiagnosticReceived?(info, transitions)
+                    appendDiagnostic(info, transitions: transitions)
                 }
             }
 
             if let cpuDiag = payload.cpuExceptionDiagnostics {
                 let info = "CPU_EXCEPTION: count=\(cpuDiag.count)"
                 HRSenseLogging.error(.state, info)
-                onDiagnosticReceived?(info, transitions)
+                appendDiagnostic(info, transitions: transitions)
             }
         }
     }
