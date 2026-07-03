@@ -31,6 +31,9 @@ public enum Action: Equatable, Sendable {
     case inferenceCompleted(InferenceResult)
     case featuresExtracted(FeatureVector)  // M8: intermediate step — 14 features extracted
 
+    // MARK: Sleep (M9 phase 5)
+    case sleep(SleepAction)
+
     // MARK: OTA (M6 full impl)
     case otaStateChanged(OTAState)
 
@@ -66,6 +69,7 @@ extension Action: CustomStringConvertible {
         case .inferenceStarted: return "inferenceStarted"
         case .inferenceCompleted: return "inferenceCompleted"
         case .featuresExtracted: return "featuresExtracted"
+        case .sleep(let action): return "sleep(\(action))"
         case .otaStateChanged(let o): return "otaStateChanged(\(o.phase))"
         case .waveformSamplesReceived(let s): return "waveformSamplesReceived(\(s.count) samples)"
         case .waveformMetricsUpdated: return "waveformMetricsUpdated"
@@ -73,6 +77,29 @@ extension Action: CustomStringConvertible {
         case .errorOccurred(let e): return "errorOccurred(\(e))"
         case .dismissError: return "dismissError"
         case .clearSamples: return "clearSamples"
+        }
+    }
+}
+
+extension SleepAction: CustomStringConvertible {
+    public var description: String {
+        switch self {
+        case .monitoringStarted:
+            return "monitoringStarted"
+        case .monitoringStopped:
+            return "monitoringStopped"
+        case .windowPrepared:
+            return "windowPrepared"
+        case .inferenceStarted:
+            return "inferenceStarted"
+        case .inferenceCompleted:
+            return "inferenceCompleted"
+        case .sessionUpdated:
+            return "sessionUpdated"
+        case .sessionPersisted:
+            return "sessionPersisted"
+        case .reset:
+            return "reset"
         }
     }
 }

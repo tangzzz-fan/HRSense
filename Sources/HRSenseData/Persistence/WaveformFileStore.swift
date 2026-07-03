@@ -44,7 +44,7 @@ public enum WaveformFileStoreError: Error, Equatable {
 
 /// File-backed storage for waveform chunks. The binary layout is intentionally
 /// DB-agnostic so later SwiftData -> GRDB migration does not affect waveform assets.
-public struct WaveformFileStore {
+public struct WaveformFileStore: @unchecked Sendable {
     private static let fileMagic: UInt32 = 0x48525357
     private static let fileVersion: UInt16 = 1
 

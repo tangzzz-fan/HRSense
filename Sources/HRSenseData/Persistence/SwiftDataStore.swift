@@ -12,6 +12,8 @@ public actor SwiftDataStore: PersistenceStore {
             for: SessionModel.self,
             HeartRateSampleModel.self,
             RRSampleModel.self,
+            ArchivedHeartRateBucketModel.self,
+            ArchivedRRBucketModel.self,
             HRVMetricRecordModel.self,
             InferenceRecordModel.self,
             SleepSessionModel.self,
@@ -186,6 +188,79 @@ public actor SwiftDataStore: PersistenceStore {
         )
     }
 
+    func listWaveformBlobRefs() throws -> [WaveformBlobRef] {
+        try fetchAll(
+            WaveformBlobRefModel.self,
+            sortBy: [SortDescriptor(\.startTimestamp, order: .forward)]
+        )
+        .map { $0.toDomain() }
+    }
+
+    func listHeartRateSamples(before cutoff: Date) throws -> [HeartRateSampleRecord] {
+        try fetchAll(
+            HeartRateSampleModel.self,
+            sortBy: [SortDescriptor(\.timestamp, order: .forward)]
+        )
+        .filter { $0.timestamp < cutoff }
+        .map { $0.toDomain() }
+    }
+
+    func listRRSamples(before cutoff: Date) throws -> [RRSampleRecord] {
+        try fetchAll(
+            RRSampleModel.self,
+            sortBy: [SortDescriptor(\.timestamp, order: .forward)]
+        )
+        .filter { $0.timestamp < cutoff }
+        .map { $0.toDomain() }
+    }
+
+    func saveArchivedHeartRateBuckets(_ buckets: [ArchivedHeartRateBucket]) throws {
+        try upsert(buckets, as: ArchivedHeartRateBucketModel.self) { model, value in
+            model.apply(value)
+        } create: { value in
+            ArchivedHeartRateBucketModel(domain: value)
+        }
+    }
+
+    func saveArchivedRRBuckets(_ buckets: [ArchivedRRBucket]) throws {
+        try upsert(buckets, as: ArchivedRRBucketModel.self) { model, value in
+            model.apply(value)
+        } create: { value in
+            ArchivedRRBucketModel(domain: value)
+        }
+    }
+
+    func listArchivedHeartRateBuckets() throws -> [ArchivedHeartRateBucket] {
+        try fetchAll(
+            ArchivedHeartRateBucketModel.self,
+            sortBy: [SortDescriptor(\.bucketStart, order: .forward)]
+        )
+        .map { $0.toDomain() }
+    }
+
+    func listArchivedRRBuckets() throws -> [ArchivedRRBucket] {
+        try fetchAll(
+            ArchivedRRBucketModel.self,
+            sortBy: [SortDescriptor(\.bucketStart, order: .forward)]
+        )
+        .map { $0.toDomain() }
+    }
+
+    func deleteWaveformBlobRefs(ids: [UUID]) throws -> Int {
+        guard !ids.isEmpty else { return 0 }
+
+        let idSet = Set(ids)
+        let models = try fetchAll(WaveformBlobRefModel.self)
+            .filter { idSet.contains($0.id) }
+
+        for model in models {
+            modelContext.delete(model)
+        }
+
+        try saveIfNeeded()
+        return models.count
+    }
+
     private func fetchAll<Model: PersistentModel>(
         _ type: Model.Type,
         sortBy: [SortDescriptor<Model>] = []
@@ -237,6 +312,10 @@ public actor SwiftDataStore: PersistenceStore {
         case let model as HeartRateSampleModel:
             return AnyHashable(model.id)
         case let model as RRSampleModel:
+            return AnyHashable(model.id)
+        case let model as ArchivedHeartRateBucketModel:
+            return AnyHashable(model.id)
+        case let model as ArchivedRRBucketModel:
             return AnyHashable(model.id)
         case let model as HRVMetricRecordModel:
             return AnyHashable(model.id)

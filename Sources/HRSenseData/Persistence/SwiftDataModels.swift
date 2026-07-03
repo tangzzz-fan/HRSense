@@ -99,6 +99,175 @@ final class RRSampleModel {
 }
 
 @Model
+final class ArchivedHeartRateBucketModel {
+    @Attribute(.unique) var id: String
+    var sessionID: UUID
+    var intervalRawValue: String
+    var bucketStart: Date
+    var minBPM: Int
+    var avgBPM: Double
+    var maxBPM: Int
+    var sampleCount: Int
+
+    init(
+        id: String,
+        sessionID: UUID,
+        intervalRawValue: String,
+        bucketStart: Date,
+        minBPM: Int,
+        avgBPM: Double,
+        maxBPM: Int,
+        sampleCount: Int
+    ) {
+        self.id = id
+        self.sessionID = sessionID
+        self.intervalRawValue = intervalRawValue
+        self.bucketStart = bucketStart
+        self.minBPM = minBPM
+        self.avgBPM = avgBPM
+        self.maxBPM = maxBPM
+        self.sampleCount = sampleCount
+    }
+
+    convenience init(domain: ArchivedHeartRateBucket) {
+        self.init(
+            id: domain.id,
+            sessionID: domain.sessionID,
+            intervalRawValue: Self.intervalRawValue(for: domain.interval),
+            bucketStart: domain.bucketStart,
+            minBPM: domain.minBPM,
+            avgBPM: domain.avgBPM,
+            maxBPM: domain.maxBPM,
+            sampleCount: domain.sampleCount
+        )
+    }
+
+    func apply(_ domain: ArchivedHeartRateBucket) {
+        sessionID = domain.sessionID
+        intervalRawValue = Self.intervalRawValue(for: domain.interval)
+        bucketStart = domain.bucketStart
+        minBPM = domain.minBPM
+        avgBPM = domain.avgBPM
+        maxBPM = domain.maxBPM
+        sampleCount = domain.sampleCount
+    }
+
+    func toDomain() -> ArchivedHeartRateBucket {
+        ArchivedHeartRateBucket(
+            id: id,
+            sessionID: sessionID,
+            interval: interval(from: intervalRawValue),
+            bucketStart: bucketStart,
+            minBPM: minBPM,
+            avgBPM: avgBPM,
+            maxBPM: maxBPM,
+            sampleCount: sampleCount
+        )
+    }
+
+    fileprivate static func intervalRawValue(for interval: HeartRateAggregationInterval) -> String {
+        switch interval {
+        case .minute:
+            return "minute"
+        case .hour:
+            return "hour"
+        case .day:
+            return "day"
+        }
+    }
+
+    private func interval(from rawValue: String) -> HeartRateAggregationInterval {
+        switch rawValue {
+        case "hour":
+            return .hour
+        case "day":
+            return .day
+        default:
+            return .minute
+        }
+    }
+}
+
+@Model
+final class ArchivedRRBucketModel {
+    @Attribute(.unique) var id: String
+    var sessionID: UUID
+    var intervalRawValue: String
+    var bucketStart: Date
+    var minRRMs: Int
+    var avgRRMs: Double
+    var maxRRMs: Int
+    var sampleCount: Int
+
+    init(
+        id: String,
+        sessionID: UUID,
+        intervalRawValue: String,
+        bucketStart: Date,
+        minRRMs: Int,
+        avgRRMs: Double,
+        maxRRMs: Int,
+        sampleCount: Int
+    ) {
+        self.id = id
+        self.sessionID = sessionID
+        self.intervalRawValue = intervalRawValue
+        self.bucketStart = bucketStart
+        self.minRRMs = minRRMs
+        self.avgRRMs = avgRRMs
+        self.maxRRMs = maxRRMs
+        self.sampleCount = sampleCount
+    }
+
+    convenience init(domain: ArchivedRRBucket) {
+        self.init(
+            id: domain.id,
+            sessionID: domain.sessionID,
+            intervalRawValue: ArchivedHeartRateBucketModel.intervalRawValue(for: domain.interval),
+            bucketStart: domain.bucketStart,
+            minRRMs: domain.minRRMs,
+            avgRRMs: domain.avgRRMs,
+            maxRRMs: domain.maxRRMs,
+            sampleCount: domain.sampleCount
+        )
+    }
+
+    func apply(_ domain: ArchivedRRBucket) {
+        sessionID = domain.sessionID
+        intervalRawValue = ArchivedHeartRateBucketModel.intervalRawValue(for: domain.interval)
+        bucketStart = domain.bucketStart
+        minRRMs = domain.minRRMs
+        avgRRMs = domain.avgRRMs
+        maxRRMs = domain.maxRRMs
+        sampleCount = domain.sampleCount
+    }
+
+    func toDomain() -> ArchivedRRBucket {
+        ArchivedRRBucket(
+            id: id,
+            sessionID: sessionID,
+            interval: interval(from: intervalRawValue),
+            bucketStart: bucketStart,
+            minRRMs: minRRMs,
+            avgRRMs: avgRRMs,
+            maxRRMs: maxRRMs,
+            sampleCount: sampleCount
+        )
+    }
+
+    private func interval(from rawValue: String) -> HeartRateAggregationInterval {
+        switch rawValue {
+        case "hour":
+            return .hour
+        case "day":
+            return .day
+        default:
+            return .minute
+        }
+    }
+}
+
+@Model
 final class HRVMetricRecordModel {
     @Attribute(.unique) var id: UUID
     var sessionID: UUID

@@ -15,6 +15,8 @@ public enum AppError: Error, Equatable, Sendable {
     case decodeError
     case computeFailed
     case inferenceFailed
+    case sleepInferenceFailed
+    case persistenceFailed(reason: String)
     case modelLoadFailed
     case otaFailed(phase: String)
 }
@@ -44,6 +46,10 @@ extension AppError: LocalizedError {
             return "Feature computation failed."
         case .inferenceFailed:
             return "CoreML inference failed."
+        case .sleepInferenceFailed:
+            return "Sleep-stage inference failed."
+        case .persistenceFailed(let reason):
+            return "Persistence failed: \(reason)"
         case .modelLoadFailed:
             return "The CoreML model could not be loaded."
         case .otaFailed(let phase):

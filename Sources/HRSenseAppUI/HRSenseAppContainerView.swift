@@ -5,6 +5,7 @@ import TGReduxKit
 @MainActor
 public struct HRSenseAppContainerView: View {
     @State private var store: Store<AppState, Action>
+    private let runtimeServices: AppComposition.RuntimeServices?
 #if DEBUG
     @StateObject private var diagnosticPanelModel: DiagnosticPanelModel
     @State private var isShowingDiagnostics = false
@@ -13,6 +14,7 @@ public struct HRSenseAppContainerView: View {
     public init() {
         let shell = AppComposition.makeAppShell()
         self.store = shell.store
+        self.runtimeServices = shell.runtimeServices
 #if DEBUG
         self._diagnosticPanelModel = StateObject(wrappedValue: shell.diagnosticPanelModel)
 #endif

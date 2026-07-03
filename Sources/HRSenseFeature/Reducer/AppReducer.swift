@@ -84,6 +84,9 @@ public enum AppReducer {
         case .featuresExtracted(let features):
             state.inference.latestFeatures = features
 
+        case .sleep(let sleepAction):
+            reduceSleep(state: &state, action: sleepAction)
+
         case .otaStateChanged(let ota):
             state.ota = ota
 
@@ -109,6 +112,8 @@ public enum AppReducer {
                 state.metrics.computationStatus = .idle
             case .inferenceFailed:
                 state.inference.status = .idle
+            case .sleepInferenceFailed:
+                state.sleep.status = .idle
             default:
                 break
             }
@@ -125,6 +130,45 @@ public enum AppReducer {
 
         case .clearSamples:
             state.live = LiveState()
+        }
+    }
+}
+
+private extension AppReducer {
+    static func reduceSleep(state: inout AppState, action: SleepAction) {
+        switch action {
+        case .monitoringStarted(let startAt):
+            state.sleep.isMonitoring = true
+            state.sleep.monitoringStartedAt = startAt
+            state.sleep.status = .monitoring
+            if state.sleep.currentSession == nil {
+                state.sleep.stageHistory = []
+            }
+
+        case .monitoringStopped:
+            state.sleep.isMonitoring = false
+            state.sleep.status = .idle
+
+        case .windowPrepared(let input):
+            state.sleep.latestWindowInput = input
+            state.sleep.status = .monitoring
+
+        case .inferenceStarted:
+            state.sleep.status = .inferring
+
+        case .inferenceCompleted(let prediction):
+            state.sleep.lastInference = prediction
+            state.sleep.status = .ready
+
+        case .sessionUpdated(let session):
+            state.sleep.currentSession = session
+            state.sleep.stageHistory = session.stages
+
+        case .sessionPersisted(let sessionID):
+            state.sleep.lastPersistedSessionID = sessionID
+
+        case .reset:
+            state.sleep = SleepState()
         }
     }
 }

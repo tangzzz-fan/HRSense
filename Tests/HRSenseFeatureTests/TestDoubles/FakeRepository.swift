@@ -119,3 +119,63 @@ final class FakeInferenceRepository: InferenceRepository, @unchecked Sendable {
         return InferenceResult(label: "Baseline", probabilities: ["Baseline": 0.75], modelVersion: "1.0")
     }
 }
+
+final class FakeSleepInferenceRepository: SleepInferenceRepository, @unchecked Sendable {
+    var inferenceCallCount = 0
+    var lastReceivedInput: SleepWindowInput?
+    var shouldThrow = false
+    var nextPrediction = SleepStagePrediction(
+        stage: .light,
+        confidence: 0.64,
+        probabilities: [.light: 0.64, .rem: 0.18, .deep: 0.12, .wake: 0.06],
+        modelVersion: "sleep-stage-fallback-v1"
+    )
+
+    func inferSleepStage(input: SleepWindowInput) async throws -> SleepStagePrediction {
+        inferenceCallCount += 1
+        lastReceivedInput = input
+        if shouldThrow { throw AppError.sleepInferenceFailed }
+        return nextPrediction
+    }
+}
+
+actor FakePersistenceStore: PersistenceStore {
+    private(set) var savedSleepSessions: [SleepSession] = []
+    var shouldThrowOnSleepSave = false
+
+    func saveSession(_ session: Session) async throws {}
+    func saveHeartRateSamples(_ samples: [HeartRateSampleRecord]) async throws {}
+    func saveRRSamples(_ samples: [RRSampleRecord]) async throws {}
+    func saveHRVMetrics(_ records: [HRVMetricRecord]) async throws {}
+    func saveInferenceRecords(_ records: [InferenceRecord]) async throws {}
+
+    func saveSleepSession(_ session: SleepSession) async throws {
+        if shouldThrowOnSleepSave {
+            throw AppError.persistenceFailed(reason: "Fake persistence failure")
+        }
+        savedSleepSessions.append(session)
+    }
+
+    func saveWaveformBlobRefs(_ refs: [WaveformBlobRef]) async throws {}
+    func saveEventRecords(_ records: [EventRecord]) async throws {}
+
+    func querySessions(_ query: SessionQuery) async throws -> [Session] { [] }
+    func queryHeartRate(_ query: HeartRateQuery) async throws -> [HeartRateSampleRecord] { [] }
+    func queryHRVMetrics(_ query: HRVMetricQuery) async throws -> [HRVMetricRecord] { [] }
+    func querySleepSessions(_ query: SleepSessionQuery) async throws -> [SleepSession] { savedSleepSessions }
+
+    func aggregateHeartRate(
+        sessionID: UUID,
+        interval: HeartRateAggregationInterval,
+        range: TimeRange?
+    ) async throws -> [HeartRateAggregationBucket] {
+        []
+    }
+
+    func purgeExpiredData(
+        now: Date,
+        policy: RetentionPolicy
+    ) async throws -> StoragePurgeResult {
+        StoragePurgeResult()
+    }
+}

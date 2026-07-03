@@ -325,6 +325,70 @@ public struct HeartRateAggregationBucket: Equatable, Sendable {
     }
 }
 
+/// One archived minute/hour/day heart-rate bucket derived from raw samples.
+public struct ArchivedHeartRateBucket: Equatable, Sendable, Identifiable {
+    public let id: String
+    public let sessionID: UUID
+    public let interval: HeartRateAggregationInterval
+    public let bucketStart: Date
+    public let minBPM: Int
+    public let avgBPM: Double
+    public let maxBPM: Int
+    public let sampleCount: Int
+
+    public init(
+        id: String,
+        sessionID: UUID,
+        interval: HeartRateAggregationInterval,
+        bucketStart: Date,
+        minBPM: Int,
+        avgBPM: Double,
+        maxBPM: Int,
+        sampleCount: Int
+    ) {
+        self.id = id
+        self.sessionID = sessionID
+        self.interval = interval
+        self.bucketStart = bucketStart
+        self.minBPM = minBPM
+        self.avgBPM = avgBPM
+        self.maxBPM = maxBPM
+        self.sampleCount = sampleCount
+    }
+}
+
+/// Archived RR bucket derived from raw RR intervals for long-term retention.
+public struct ArchivedRRBucket: Equatable, Sendable, Identifiable {
+    public let id: String
+    public let sessionID: UUID
+    public let interval: HeartRateAggregationInterval
+    public let bucketStart: Date
+    public let minRRMs: Int
+    public let avgRRMs: Double
+    public let maxRRMs: Int
+    public let sampleCount: Int
+
+    public init(
+        id: String,
+        sessionID: UUID,
+        interval: HeartRateAggregationInterval,
+        bucketStart: Date,
+        minRRMs: Int,
+        avgRRMs: Double,
+        maxRRMs: Int,
+        sampleCount: Int
+    ) {
+        self.id = id
+        self.sessionID = sessionID
+        self.interval = interval
+        self.bucketStart = bucketStart
+        self.minRRMs = minRRMs
+        self.avgRRMs = avgRRMs
+        self.maxRRMs = maxRRMs
+        self.sampleCount = sampleCount
+    }
+}
+
 /// Retention knobs for future cleanup and archival tasks.
 public struct RetentionPolicy: Equatable, Sendable {
     public let waveformRetentionDays: Int
