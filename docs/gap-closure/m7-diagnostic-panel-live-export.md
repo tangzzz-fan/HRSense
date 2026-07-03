@@ -77,6 +77,84 @@
 - 组装 `DiagnosticPackage`
 - 生成临时 JSON 文件供分享
 
+## 新增实现原理
+
+### 1. 为什么引入 `DiagnosticPanelModel`
+
+原来的 `DiagnosticPanelView` 直接持有本地 `@State`，但这些状态并没有稳定的数据来源，导致：
+
+- KPI 只能写死默认值
+- 导出按钮没有真实业务对象可调用
+- MetricKit / 日志 / 状态迁移三类数据无法统一装配
+
+这次改为 `View -> Model -> Dependencies` 三层结构：
+
+- `DiagnosticPanelView`
+  - 只负责展示与用户交互
+- `DiagnosticPanelModel`
+  - 负责刷新 live 数据、生成诊断包、维护导出状态
+- `DiagnosticPanelDependencies`
+  - 由 `AppComposition` 统一装配真实依赖
+
+这样做的好处是：
+
+- View 层不需要直接依赖 Data 层实现
+- 测试时可以用闭包替身注入固定数据
+- 后续继续补持久化、归档、真机诊断时不需要重写 UI
+
+### 2. live metrics 是如何接进来的
+
+`AppComposition` 在应用装配阶段创建：
+
+- `BLECentralDataSource`
+- `DeviceRepositoryImpl`
+- `MetricsCollector`
+
+随后把 `MetricsCollector.kpiSnapshot()` 注入 `DiagnosticPanelModel`。
+
+诊断面板通过定时器每秒调用一次 `model.refresh()`，而 `refresh()` 内部再去读取：
+
+- `MetricsCollector.kpiSnapshot()`
+- `MetricKitManager.recentDiagnostics`
+- `LoggingRegistry.ringBuffer.snapshot()`
+- `StateTransitionRecorder.shared.recentTransitions`
+
+因此面板展示的是**当前应用运行态的真实快照**，不是面板内部自己维护的一份假状态。
+
+### 3. 诊断导出链路为什么这次能闭环
+
+此前项目虽然已有 `DiagnosticPackage` 结构，但缺少两个关键环节：
+
+- 没有真实日志源
+- 没有真正落地文件并进入分享链路
+
+本次补齐后的导出路径是：
+
+1. `HRSenseLogging` 记录日志时，同时写入 `LoggingRegistry.ringBuffer`
+2. `DiagnosticPanelModel.exportDiagnosticPackage()` 读取：
+   - 最近日志
+   - 最近状态迁移
+   - 指标快照
+   - 系统信息
+3. 组装为 `DiagnosticPackage`
+4. 编码成 JSON
+5. 写入 `temporaryDirectory`
+6. 由 `ShareLink` 暴露给系统分享面板
+
+因此这次不是“点击按钮弹提示”，而是已经形成了真实的诊断文件导出链路。
+
+### 4. 为什么顺手补 `MetricsCollector` 的埋点
+
+如果只把 UI 接到 `MetricsCollector`，但业务路径不更新计数器，面板依然会长期显示 0。
+
+所以这次同步把几个最关键的计数路径补上：
+
+- 连接尝试 / 成功
+- 命令发送 / 超时
+- OTA 尝试 / 成功
+
+这能保证诊断面板一打开就能看到真实变化，避免“接好了但没值”的假闭环。
+
 ### 导出链路闭环
 
 `DiagnosticPanelView` 现已支持：
