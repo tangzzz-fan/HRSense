@@ -36,6 +36,32 @@ final class CoreMLServiceTests: XCTestCase {
         XCTAssertEqual(selected?.featureContractVersion, 1)
     }
 
+    func test_defaultSelectionStrategySelectsSleepStageRequest() {
+        let strategy = DefaultModelSelectionStrategy()
+        let request = ModelSelectionRequest.sleepStageClassifierV1
+        let descriptors = [
+            ModelDescriptor(
+                modelName: "StressClassifier_v1",
+                modelVersion: "1.0.0",
+                task: InferenceTask.stressClassification.rawValue,
+                featureContractVersion: 1,
+                url: URL(fileURLWithPath: "/tmp/stress.mlpackage")
+            ),
+            ModelDescriptor(
+                modelName: "SleepStageClassifier_v1",
+                modelVersion: "1.0.0-placeholder",
+                task: InferenceTask.sleepStage.rawValue,
+                featureContractVersion: 1,
+                url: URL(fileURLWithPath: "/tmp/sleep.mlpackage")
+            )
+        ]
+
+        let selected = strategy.selectModel(from: descriptors, request: request)
+
+        XCTAssertEqual(selected?.modelName, "SleepStageClassifier_v1")
+        XCTAssertEqual(selected?.task, InferenceTask.sleepStage.rawValue)
+    }
+
     func test_predictFallsBackWhenExplicitModelURLIsMissing() {
         let missingURL = URL(fileURLWithPath: "/tmp/HRSense/MissingModel.mlpackage")
         let service = CoreMLService(modelURL: missingURL)
@@ -125,6 +151,20 @@ final class CoreMLServiceTests: XCTestCase {
 
         let prediction = service.predict(features: [1, 2, 3])
 
+        XCTAssertNil(prediction)
+    }
+
+    func test_sleepConfigurationUsesSleepFallbackVersionAndNoFallbackPrediction() {
+        let missingURL = URL(fileURLWithPath: "/tmp/HRSense/MissingSleepModel.mlpackage")
+        let service = CoreMLService(
+            modelURL: missingURL,
+            selectionRequest: .sleepStageClassifierV1,
+            configuration: .sleepStageClassifier
+        )
+
+        let prediction = service.predict(features: Array(repeating: 0, count: 18))
+
+        XCTAssertEqual(service.activeModelVersion, "sleep-stage-fallback-v1")
         XCTAssertNil(prediction)
     }
 

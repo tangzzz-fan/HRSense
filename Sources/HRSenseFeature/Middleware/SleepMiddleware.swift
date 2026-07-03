@@ -31,6 +31,23 @@ public func makeSleepMiddleware(
         case .connectionStateChanged(.disconnected):
             store.dispatch(.sleep(.monitoringStopped(nowProvider())))
 
+        case .sleep(.historyLoadRequested(let limit)):
+            guard let persistenceStore else { break }
+            Task {
+                do {
+                    let sessions = try await persistenceStore.querySleepSessions(
+                        SleepSessionQuery(limit: limit)
+                    )
+                    await MainActor.run {
+                        store.dispatch(.sleep(.historyLoaded(sessions)))
+                    }
+                } catch {
+                    await MainActor.run {
+                        store.dispatch(.errorOccurred(.persistenceFailed(reason: error.localizedDescription)))
+                    }
+                }
+            }
+
         case .clearSamples:
             metricsHistory.removeAll()
             store.dispatch(.sleep(.reset))
@@ -100,6 +117,9 @@ public func makeSleepMiddleware(
             }
 
         default:
+            if case .sleep(.sessionPersisted) = action {
+                store.dispatch(.sleep(.historyLoadRequested(limit: 7)))
+            }
             break
         }
     }

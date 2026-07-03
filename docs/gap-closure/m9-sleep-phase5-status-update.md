@@ -1,4 +1,4 @@
-# M9 阶段 5 当前完成度与 C++ 特征接线说明
+# M9 阶段 5 当前完成度、C++ 特征与 UI 状态说明
 
 ## 结论先说
 
@@ -6,8 +6,8 @@
 
 当前最准确的状态是：
 
-- **已完成**：睡眠分期的输入契约、仓储边界、Redux 编排最小闭环、C++ 睡眠特征基础接线
-- **未完成**：真实 CoreML 睡眠模型、睡眠图表展示闭环、C++ 特征与模型口径联调
+- **已完成**：睡眠分期的输入契约、仓储边界、Redux 编排最小闭环、C++ 睡眠特征基础接线、Hypnogram/历史展示基础 UI
+- **未完成**：真实 CoreML 睡眠模型、完整展示产品化、C++ 特征与模型口径联调
 
 也就是说，阶段 5 现在已经从“只有规划”推进到了“**可以运行的工程骨架 + 最小编排链路**”，但还没有到 plans 里“睡眠分期模型”真正完成的状态。
 
@@ -90,6 +90,69 @@
 
 - 窗口内 `heartRate` 序列 -> `hrs_compute_hr_trend()`
 - 近期 `RMSSD` 历史序列 -> `hrs_compute_circadian_variation()`
+
+### 6. 睡眠模型输入契约已冻结
+
+当前已新增：
+
+- `Sources/HRSenseCore/Entities/SleepModelFeatureSpec.swift`
+
+这份定义明确冻结了：
+
+- feature 名称
+- feature 顺序
+- `contractVersion = 1`
+
+当前睡眠模型输入共 `18` 维，已经从“隐式约定”升级为“显式 schema”。
+
+### 7. 睡眠 UI 已进入可展示阶段
+
+当前已新增：
+
+- `Sources/HRSenseFeature/Views/SleepHypnogramView.swift`
+
+并在 `RootView` 中接入：
+
+- 当前睡眠监测区
+- Hypnogram 展示
+- 最近睡眠历史展示
+
+同时 `SleepMiddleware` 已支持通过 `PersistenceStore.querySleepSessions(...)` 拉取最近睡眠会话并回填到 `SleepState.recentSessions`。
+
+### 8. Python 模型生成脚本已提供
+
+当前 `tools` 目录下已具备：
+
+- `tools/create_placeholder_model.py`
+- `tools/create_sleep_placeholder_model.py`
+
+含义分别是：
+
+- stress 占位模型生成脚本
+- sleep-stage 占位模型生成脚本
+
+这意味着工程侧已经具备“先生成占位 `mlpackage` 跑通链路，再替换为真实训练模型”的工具基础。
+
+### 9. 本地 sleep placeholder model 已生成
+
+当前本地已经实际生成：
+
+- `Models/SleepStageClassifier_v1.mlpackage`
+
+这份模型当前是：
+
+- Python 生成的 placeholder 模型
+- 输入 `18` 维
+- 输出 `Wake / Light / Deep / REM`
+- metadata:
+  - `task = sleep-stage`
+  - `featureContractVersion = 1`
+  - `modelVersion = 1.0.0-placeholder`
+
+需要注意：
+
+- 它说明工程链路已经可以真实加载 sleep `mlpackage`
+- 但它仍然不是最终训练好的产品模型
 
 ## 未完成部分
 
@@ -214,15 +277,17 @@ plans 里明确提到两个 C++ 函数：
 - 睡眠历史查询展示
 - 真实模型
 - C++ 特征与模型口径联调
+- 完整的 UI 产品化打磨
 
 ## 下一步应做什么
 
-因为这两个 C++ 函数**已经添加并接线完成**，所以下一步应当继续推进：
+因为 C++ 两个函数已经接好，当前下一步应当继续推进：
 
-1. **校准 C++ 特征口径**
-2. **接真实 `SleepStageClassifier_v1.mlpackage`**
-3. **把模型输入 feature 名称与顺序固定**
-4. **继续睡眠 UI / Hypnogram**
+1. **把 `SleepStageClassifier_v1.mlpackage` 放到 `Models` 目录**
+2. **为 `sleep-stage` 任务接真实 CoreML 加载**
+3. **按 `SleepModelFeatureSpec` 校验 feature contract**
+4. **用真实 CoreML 输出替换 fallback 睡眠推理**
+5. **继续 UI 产品化和历史交互**
 
 ## 对 plans 的更新理解
 
@@ -231,8 +296,12 @@ plans 里明确提到两个 C++ 函数：
 - `SleepStageService.swift`：**已落 bootstrap 版**
 - `SleepInferenceRepositoryImpl.swift`：**已落**
 - `SleepWindowInput`：**已补，属于 plans 的必要前置契约**
+- `SleepModelFeatureSpec`：**已补，contract 已冻结**
 - `SleepMiddleware / SleepState / SleepAction`：**已落，可运行**
 - `hrs_compute_hr_trend()`：**已完成第一版**
 - `hrs_compute_circadian_variation()`：**已完成第一版**
-- `SleepStageClassifier_v1.mlpackage`：**未完成**
-- `SleepHypnogramView`：**未完成**
+- `SleepHypnogramView`：**已落基础版**
+- 睡眠历史查询展示：**已落基础版**
+- `tools/create_sleep_placeholder_model.py`：**已落**
+- `Models/SleepStageClassifier_v1.mlpackage`：**已在本地生成 placeholder 版**
+- 真实训练版 `SleepStageClassifier_v1.mlpackage`：**未完成**

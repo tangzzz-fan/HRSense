@@ -5,6 +5,8 @@ import HRSenseCore
 public enum SleepAction: Equatable, Sendable {
     case monitoringStarted(Date)
     case monitoringStopped(Date)
+    case historyLoadRequested(limit: Int)
+    case historyLoaded([SleepSession])
     case windowPrepared(SleepWindowInput)
     case inferenceStarted
     case inferenceCompleted(SleepStagePrediction)

@@ -42,6 +42,35 @@ final class SleepMiddlewareTests: XCTestCase {
         XCTAssertEqual(store.state.sleep.status, .idle)
     }
 
+    func test_historyLoadRequestedQueriesPersistenceAndUpdatesState() async throws {
+        let computeRepo = FakeComputeRepository()
+        let sleepRepo = FakeSleepInferenceRepository()
+        let persistenceStore = FakePersistenceStore()
+        let session = SleepSession(
+            date: Date(timeIntervalSince1970: 1_725_000_000),
+            stages: [
+                SleepStageSegment(
+                    stage: .deep,
+                    startAt: Date(timeIntervalSince1970: 1_725_000_000),
+                    endAt: Date(timeIntervalSince1970: 1_725_000_600)
+                )
+            ],
+            modelVersion: "sleep-stage-fallback-v1"
+        )
+        await persistenceStore.seedSleepSessions([session])
+
+        let store = makeStore(
+            computeRepo: computeRepo,
+            sleepRepo: sleepRepo,
+            persistenceStore: persistenceStore
+        )
+
+        store.dispatch(.sleep(.historyLoadRequested(limit: 7)))
+        try? await Task.sleep(nanoseconds: 200_000_000)
+
+        XCTAssertEqual(store.state.sleep.recentSessions, [session])
+    }
+
     func test_hrvComputedBuildsWindowRunsInferenceAndPersistsSession() async throws {
         let computeRepo = FakeComputeRepository()
         computeRepo.nextSleepFeatures = SleepCXXFeatures(hrTrend: -0.33, circadianVariation: 0.0)

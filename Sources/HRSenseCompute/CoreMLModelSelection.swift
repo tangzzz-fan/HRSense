@@ -3,6 +3,7 @@ import CoreML
 
 public enum InferenceTask: String, Equatable, Sendable {
     case stressClassification = "stress-classification"
+    case sleepStage = "sleep-stage"
 }
 
 public struct ModelSelectionRequest: Equatable, Sendable {
@@ -27,6 +28,12 @@ public struct ModelSelectionRequest: Equatable, Sendable {
         task: .stressClassification,
         featureContractVersion: 1,
         preferredModelName: "StressClassifier_v1"
+    )
+
+    public static let sleepStageClassifierV1 = ModelSelectionRequest(
+        task: .sleepStage,
+        featureContractVersion: 1,
+        preferredModelName: "SleepStageClassifier_v1"
     )
 }
 

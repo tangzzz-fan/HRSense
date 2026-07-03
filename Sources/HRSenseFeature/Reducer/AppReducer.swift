@@ -149,6 +149,12 @@ private extension AppReducer {
             state.sleep.isMonitoring = false
             state.sleep.status = .idle
 
+        case .historyLoadRequested:
+            break
+
+        case .historyLoaded(let sessions):
+            state.sleep.recentSessions = sessions
+
         case .windowPrepared(let input):
             state.sleep.latestWindowInput = input
             state.sleep.status = .monitoring

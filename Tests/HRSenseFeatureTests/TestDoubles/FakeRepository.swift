@@ -177,7 +177,16 @@ actor FakePersistenceStore: PersistenceStore {
     func querySessions(_ query: SessionQuery) async throws -> [Session] { [] }
     func queryHeartRate(_ query: HeartRateQuery) async throws -> [HeartRateSampleRecord] { [] }
     func queryHRVMetrics(_ query: HRVMetricQuery) async throws -> [HRVMetricRecord] { [] }
-    func querySleepSessions(_ query: SleepSessionQuery) async throws -> [SleepSession] { savedSleepSessions }
+    func querySleepSessions(_ query: SleepSessionQuery) async throws -> [SleepSession] {
+        var sessions = savedSleepSessions
+        if let range = query.dateRange {
+            sessions = sessions.filter { range.contains($0.date) }
+        }
+        if let limit = query.limit {
+            sessions = Array(sessions.prefix(limit))
+        }
+        return sessions
+    }
 
     func aggregateHeartRate(
         sessionID: UUID,
@@ -192,5 +201,9 @@ actor FakePersistenceStore: PersistenceStore {
         policy: RetentionPolicy
     ) async throws -> StoragePurgeResult {
         StoragePurgeResult()
+    }
+
+    func seedSleepSessions(_ sessions: [SleepSession]) {
+        savedSleepSessions = sessions
     }
 }

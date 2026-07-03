@@ -55,7 +55,7 @@ public struct SleepCXXFeatures: Equatable, Sendable {
 
 /// Canonical input contract for M9 phase 5 sleep-stage inference.
 public struct SleepWindowInput: Equatable, Sendable {
-    public static let currentContractVersion = 1
+    public static let currentContractVersion = SleepModelFeatureSpec.contractVersion
 
     public let metrics: HRVMetrics
     public let timeContext: SleepTimeContext
@@ -76,11 +76,6 @@ public struct SleepWindowInput: Equatable, Sendable {
 
     /// Flatten to a stable ordered vector for future CoreML model input.
     public func toFeatureVector() -> [Float] {
-        metrics.toFeatureVector() + [
-            Float(timeContext.minutesSinceSessionStart),
-            Float(timeContext.localClockMinutes),
-            Float(cxxFeatures.hrTrend),
-            Float(cxxFeatures.circadianVariation),
-        ]
+        SleepModelFeatureSpec.encode(self)
     }
 }

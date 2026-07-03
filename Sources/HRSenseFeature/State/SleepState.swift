@@ -11,6 +11,7 @@ public struct SleepState: Equatable, Sendable {
     }
 
     public var currentSession: SleepSession?
+    public var recentSessions: [SleepSession]
     public var stageHistory: [SleepStageSegment]
     public var isMonitoring: Bool
     public var monitoringStartedAt: Date?
@@ -21,6 +22,7 @@ public struct SleepState: Equatable, Sendable {
 
     public init(
         currentSession: SleepSession? = nil,
+        recentSessions: [SleepSession] = [],
         stageHistory: [SleepStageSegment] = [],
         isMonitoring: Bool = false,
         monitoringStartedAt: Date? = nil,
@@ -30,6 +32,7 @@ public struct SleepState: Equatable, Sendable {
         lastPersistedSessionID: UUID? = nil
     ) {
         self.currentSession = currentSession
+        self.recentSessions = recentSessions
         self.stageHistory = stageHistory
         self.isMonitoring = isMonitoring
         self.monitoringStartedAt = monitoringStartedAt

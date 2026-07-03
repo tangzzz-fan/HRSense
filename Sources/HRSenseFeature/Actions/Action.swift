@@ -88,6 +88,10 @@ extension SleepAction: CustomStringConvertible {
             return "monitoringStarted"
         case .monitoringStopped:
             return "monitoringStopped"
+        case .historyLoadRequested:
+            return "historyLoadRequested"
+        case .historyLoaded:
+            return "historyLoaded"
         case .windowPrepared:
             return "windowPrepared"
         case .inferenceStarted:

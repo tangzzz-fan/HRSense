@@ -3,8 +3,59 @@ import XCTest
 @testable import HRSenseData
 
 final class SleepInferenceRepositoryImplTests: XCTestCase {
+    func test_inferSleepStagePrefersCoreMLModelWhenLocalModelExists() async throws {
+        let modelURL = sleepModelURL()
+        try XCTSkipUnless(
+            FileManager.default.fileExists(atPath: modelURL.path),
+            "Local sleep placeholder model has not been generated yet."
+        )
+
+        let repository = SleepInferenceRepositoryImpl(
+            service: SleepStageService(
+                modelURL: modelURL,
+                nowProvider: { Date(timeIntervalSince1970: 1_725_000_600) }
+            )
+        )
+
+        let prediction = try await repository.inferSleepStage(
+            input: SleepWindowInput(
+                metrics: HRVMetrics(
+                    sdnn: 48,
+                    rmssd: 65,
+                    pnn50: 20,
+                    meanRR: 980,
+                    hr: 58,
+                    lfPower: 320,
+                    hfPower: 520,
+                    lfHfRatio: 0.8,
+                    totalPower: 920,
+                    sd1: 28,
+                    sd2: 52,
+                    sampleEntropy: 1.2,
+                    dfaAlpha1: 0.84,
+                    stressIndex: 120
+                ),
+                timeContext: SleepTimeContext(
+                    windowStart: Date(timeIntervalSince1970: 1_725_000_000),
+                    windowEnd: Date(timeIntervalSince1970: 1_725_000_300),
+                    minutesSinceSessionStart: 80,
+                    localClockMinutes: 150
+                ),
+                cxxFeatures: SleepCXXFeatures(hrTrend: -0.12, circadianVariation: 0.18)
+            )
+        )
+
+        XCTAssertEqual(prediction.modelVersion, "1.0.0-placeholder")
+        XCTAssertTrue(SleepStage.allCases.contains(prediction.stage))
+        XCTAssertFalse(prediction.probabilities.isEmpty)
+    }
+
     func test_inferSleepStageReturnsWakeForHighStressWindow() async throws {
-        let repository = SleepInferenceRepositoryImpl()
+        let repository = SleepInferenceRepositoryImpl(
+            service: SleepStageService(
+                modelURL: URL(fileURLWithPath: "/tmp/HRSense/MissingSleepModel.mlpackage")
+            )
+        )
 
         let prediction = try await repository.inferSleepStage(
             input: SleepWindowInput(
@@ -32,7 +83,11 @@ final class SleepInferenceRepositoryImplTests: XCTestCase {
     }
 
     func test_inferSleepStageReturnsDeepForHighParasympatheticWindow() async throws {
-        let repository = SleepInferenceRepositoryImpl()
+        let repository = SleepInferenceRepositoryImpl(
+            service: SleepStageService(
+                modelURL: URL(fileURLWithPath: "/tmp/HRSense/MissingSleepModel.mlpackage")
+            )
+        )
 
         let prediction = try await repository.inferSleepStage(
             input: SleepWindowInput(
@@ -84,5 +139,14 @@ final class SleepInferenceRepositoryImplTests: XCTestCase {
         XCTAssertEqual(flattened[15], 90, accuracy: 0.0001)
         XCTAssertEqual(flattened[16], -0.25, accuracy: 0.0001)
         XCTAssertEqual(flattened[17], 0.42, accuracy: 0.0001)
+    }
+
+    private func sleepModelURL() -> URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Models")
+            .appendingPathComponent("SleepStageClassifier_v1.mlpackage")
     }
 }

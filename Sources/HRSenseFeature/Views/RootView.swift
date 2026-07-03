@@ -16,6 +16,8 @@ public struct RootView: View {
                 deviceInfoView
                 heartRateView
                 inferenceResultView
+                sleepMonitoringView
+                sleepHistoryView
                 waveformView
                 errorBannerView
                 Spacer()
@@ -24,6 +26,7 @@ public struct RootView: View {
         }
         .onAppear {
             store.dispatch(.startScanning)
+            store.dispatch(.sleep(.historyLoadRequested(limit: 7)))
         }
     }
 
@@ -161,6 +164,82 @@ public struct RootView: View {
         }
     }
 
+    // MARK: - Sleep
+
+    @ViewBuilder
+    private var sleepMonitoringView: some View {
+        if let session = store.state.sleep.currentSession {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Text("Sleep Monitoring")
+                        .font(.headline)
+                    Spacer()
+                    Text(store.state.sleep.statusLabel)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                if let inference = store.state.sleep.lastInference {
+                    HStack(spacing: 8) {
+                        Text(inference.stage.displayName)
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                        Text(String(format: "%.0f%%", inference.confidence * 100))
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Text(inference.modelVersion)
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                }
+
+                SleepHypnogramView(session: session)
+
+                if let latestInput = store.state.sleep.latestWindowInput {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Sleep Model Contract v\(latestInput.contractVersion)")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                        Text(SleepModelFeatureSpec.orderedFeatureNames.joined(separator: ", "))
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var sleepHistoryView: some View {
+        let historicalSessions = store.state.sleep.recentSessions.filter {
+            $0.id != store.state.sleep.currentSession?.id
+        }
+
+        if !historicalSessions.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Recent Sleep Sessions")
+                    .font(.headline)
+
+                ForEach(Array(historicalSessions.prefix(3))) { session in
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text(Self.dateFormatter.string(from: session.date))
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                            Spacer()
+                            Text("\(session.stages.count) segments")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        SleepHypnogramView(session: session)
+                    }
+                }
+            }
+        }
+    }
+
     // MARK: - Waveform
 
     @ViewBuilder
@@ -238,5 +317,34 @@ public struct RootView: View {
             return device.name
         }
         return "HRSense Peripheral"
+    }
+
+    private static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter
+    }()
+}
+
+private extension SleepState {
+    var statusLabel: String {
+        switch status {
+        case .idle: return "Idle"
+        case .monitoring: return "Monitoring"
+        case .inferring: return "Inferring"
+        case .ready: return "Ready"
+        }
+    }
+}
+
+private extension SleepStage {
+    var displayName: String {
+        switch self {
+        case .wake: return "Wake"
+        case .light: return "Light"
+        case .deep: return "Deep"
+        case .rem: return "REM"
+        }
     }
 }
