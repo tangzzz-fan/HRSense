@@ -93,14 +93,14 @@ final class SimulatorViewModel {
     }
 
     func selectGeneratorMode(_ mode: SimulatorLaunchOptions.GeneratorMode) {
-        selectedGeneratorMode = mode
-        generator = Self.makeGenerator(mode: mode)
+        replaceGenerator(with: Self.makeGenerator(mode: mode), mode: mode)
     }
 
     func setManualHR(_ heartRate: Int) {
         currentHeartRate = heartRate
         if let manualGenerator = generator as? ManualHRGenerator {
             manualGenerator.currentHeartRate = heartRate
+            restartWaveformStreamingIfNeeded()
         }
     }
 
@@ -146,11 +146,7 @@ final class SimulatorViewModel {
             return
         }
         let manualGenerator = ManualHRGenerator(heartRate: currentHeartRate)
-        if isStreaming {
-            manualGenerator.start()
-        }
-        generator = manualGenerator
-        selectedGeneratorMode = .manual
+        replaceGenerator(with: manualGenerator, mode: .manual)
     }
 
     private func applyFault(_ fault: FaultConfig) {
@@ -192,6 +188,25 @@ final class SimulatorViewModel {
         waveformStreamers.removeAll()
         generator?.stop()
         updateStatus()
+    }
+
+    private func replaceGenerator(
+        with newGenerator: any DataGeneratorProtocol,
+        mode: SimulatorLaunchOptions.GeneratorMode
+    ) {
+        if isStreaming {
+            newGenerator.start()
+        }
+        generator = newGenerator
+        selectedGeneratorMode = mode
+        restartWaveformStreamingIfNeeded()
+    }
+
+    private func restartWaveformStreamingIfNeeded() {
+        guard !waveformStreamers.isEmpty else { return }
+        waveformStreamers.forEach { $0.stop() }
+        waveformStreamers.removeAll()
+        startWaveformStreamingIfNeeded(sampleKinds: [DataKind.waveform.rawValue])
     }
 
     private func startHeartRateStreamingIfNeeded(sampleKinds: [UInt8]) {

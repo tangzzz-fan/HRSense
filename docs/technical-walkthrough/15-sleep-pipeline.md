@@ -7,7 +7,7 @@
 ## 1. 管线总览
 
 ```
-hrvComputed (每 30s)
+hrvComputed (每 10s)
     │
     ├── 1. 追加 SleepMetricSnapshot 到 history
     │       (保留最近 4 小时的 RMSSD 序列)

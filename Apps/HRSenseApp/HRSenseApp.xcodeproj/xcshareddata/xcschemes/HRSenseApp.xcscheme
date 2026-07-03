@@ -15,10 +15,10 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "181751302FF7453600072403"
-               BuildableName = "HRSenseSimulator.app"
-               BlueprintName = "HRSenseSimulator"
-               ReferencedContainer = "container:HRSenseSimulator.xcodeproj">
+               BlueprintIdentifier = "1817510B2FF744B000072403"
+               BuildableName = "HRSenseApp.app"
+               BlueprintName = "HRSenseApp"
+               ReferencedContainer = "container:HRSenseApp.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -44,10 +44,10 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "181751302FF7453600072403"
-            BuildableName = "HRSenseSimulator.app"
-            BlueprintName = "HRSenseSimulator"
-            ReferencedContainer = "container:HRSenseSimulator.xcodeproj">
+            BlueprintIdentifier = "1817510B2FF744B000072403"
+            BuildableName = "HRSenseApp.app"
+            BlueprintName = "HRSenseApp"
+            ReferencedContainer = "container:HRSenseApp.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -61,10 +61,10 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "181751302FF7453600072403"
-            BuildableName = "HRSenseSimulator.app"
-            BlueprintName = "HRSenseSimulator"
-            ReferencedContainer = "container:HRSenseSimulator.xcodeproj">
+            BlueprintIdentifier = "1817510B2FF744B000072403"
+            BuildableName = "HRSenseApp.app"
+            BlueprintName = "HRSenseApp"
+            ReferencedContainer = "container:HRSenseApp.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

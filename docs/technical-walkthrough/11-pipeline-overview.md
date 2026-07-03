@@ -33,7 +33,7 @@
 ┌────────────────────┐    ┌───────────────────────────┐
 │ ComputeMiddleware   │    │ WaveformMiddleware         │
 │ ─ 5min 滑动窗口    │    │ ─ 10Hz 轮询 Ring Buffer   │
-│ ─ 30s 步进触发     │    │ ─ dispatch 最近 5s 窗口    │
+│ ─ 10s 步进触发     │    │ ─ dispatch 最近 5s 窗口    │
 └────────┬───────────┘    └────────┬──────────────────┘
          │                          │
          ▼                          ▼
@@ -146,7 +146,7 @@ sequenceDiagram
     BSM->>BSM: 节流 (100ms 批处理)
     BSM->>CompM: dispatch(.heartRateReceived)
     CompM->>CompM: 积累 RR, 裁剪 5min 窗口
-    alt 30s 步进到达
+    alt 10s 步进到达
         CompM->>CompM: dispatch(.computeStarted)
         CompM->>Cxx: hrs_compute_hrv(rrBuffer)
         Cxx-->>CompM: HRVMetrics (14 fields)

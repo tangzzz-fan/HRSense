@@ -203,7 +203,7 @@ sequenceDiagram
     participant Model as .mlmodelc
     participant Redux as Store
 
-    Note over MW: 触发条件:<br/>收到 .heartRateReceived<br/>且 rrBuffer 窗口 ≥ 5 分钟<br/>且距上次计算 ≥ 30 秒
+    Note over MW: 触发条件:<br/>收到 .heartRateReceived<br/>且 rrBuffer 窗口 ≥ 5 分钟<br/>且距上次计算 ≥ 10 秒
 
     MW->>MW: rrBuffer.append(rrIntervals)
 

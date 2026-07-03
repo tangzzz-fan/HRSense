@@ -2,6 +2,10 @@ import Foundation
 import HRSenseProtocol
 
 /// Exercise heart-rate generator: ramps up, sustains, recovers.
+///
+/// Produces 2 RR intervals per sample with reduced variability during
+/// peak exercise (lower HRV → "Stress" classification), recovering
+/// towards baseline variability during cool-down.
 public final class ExerciseHRGenerator: DataGeneratorProtocol, @unchecked Sendable {
     public private(set) var mode: GeneratorMode = .exercise
     private var sampleSeq: UInt32 = 0
@@ -32,14 +36,26 @@ public final class ExerciseHRGenerator: DataGeneratorProtocol, @unchecked Sendab
 
     public func nextSample(timestampMs: UInt32) -> DeviceSample {
         let t = Double(timestampMs) / 1000.0
-        let hr = currentHR(at: t)
+        let hr = Double(currentHR(at: t))
         let seq = sampleSeq
         sampleSeq += 1
+
+        // During exercise: reduced RSA amplitude and noise (sympathetic dominance)
+        // During rest/recovery: normal RSA amplitude (parasympathetic return)
+        let rsaAmp = hr > 100 ? 5.0 : 18.0
+        let noiseSd = hr > 100 ? 3.0 : 8.0
+        let rr = RRSynthesizer.generate(
+            heartRate: hr,
+            elapsedSeconds: t,
+            rsaAmplitude: rsaAmp,
+            noiseStd: noiseSd,
+            intervalCount: 2
+        )
 
         return DeviceSample(
             timestamp: timestampMs,
             heartRate: UInt16(hr),
-            rrIntervals: [UInt16(60_000 / max(hr, 30))],
+            rrIntervals: rr,
             sampleSeq: seq
         )
     }

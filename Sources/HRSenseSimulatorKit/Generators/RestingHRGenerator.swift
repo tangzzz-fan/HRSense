@@ -2,6 +2,9 @@ import Foundation
 import HRSenseProtocol
 
 /// Resting heart-rate generator: 60–75 bpm with sinusoidal variation.
+///
+/// Produces 2 realistic RR intervals per sample with RSA modulation,
+/// generating HRV metrics in the "Baseline" range (RMSSD ~30-50 ms).
 public final class RestingHRGenerator: DataGeneratorProtocol, @unchecked Sendable {
     public private(set) var mode: GeneratorMode = .resting
     private var sampleSeq: UInt32 = 0
@@ -25,8 +28,14 @@ public final class RestingHRGenerator: DataGeneratorProtocol, @unchecked Sendabl
 
     public func nextSample(timestampMs: UInt32) -> DeviceSample {
         let t = Double(timestampMs) / 1000.0
-        let hr = Int(baseBPM + amplitude * sin(2 * Double.pi * t / periodSeconds))
-        let rr: [UInt16] = [UInt16(60_000 / max(hr, 30))]
+        let hr = baseBPM + amplitude * sin(2 * Double.pi * t / periodSeconds)
+        let rr = RRSynthesizer.generate(
+            heartRate: hr,
+            elapsedSeconds: t,
+            rsaAmplitude: 20,   // moderate RSA → visible HRV
+            noiseStd: 10,       // natural jitter
+            intervalCount: 2
+        )
         let seq = sampleSeq
         sampleSeq += 1
 

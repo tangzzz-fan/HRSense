@@ -10,7 +10,7 @@
 ┌─────────────────────────────────────────────────────────┐
 │  ComputeMiddleware (Swift, MainActor 外)                 │
 │  ─ 积累 RR 间期到 5 分钟滑动窗口                         │
-│  ─ 每 30 秒触发一次计算                                  │
+│  ─ 每 10 秒触发一次计算                                  │
 └─────────────────────────┬───────────────────────────────┘
                           │ rrBuffer: [UInt16]
                           ▼
@@ -152,7 +152,7 @@ public struct ComputeBridge: Sendable {
 public func makeComputeMiddleware(
     computeRepo: any ComputeRepository,
     windowDuration: TimeInterval = 300,  // 5 分钟窗口
-    stepInterval: TimeInterval = 30      // 30 秒步进
+    stepInterval: TimeInterval = 10      // 10 秒步进
 ) -> Middleware<AppState, Action> {
     var rrBuffer: [(date: Date, rr: Int)] = []
     var lastComputeTime: Date = Date.distantPast
@@ -172,7 +172,7 @@ public func makeComputeMiddleware(
             let windowStart = Date().addingTimeInterval(-windowDuration)
             rrBuffer = rrBuffer.filter { $0.date >= windowStart }
 
-            // ③ 30 秒步进触发
+            // ③ 10 秒步进触发
             let now = Date()
             if now.timeIntervalSince(lastComputeTime) >= stepInterval,
                rrBuffer.count >= 2 {
@@ -201,7 +201,7 @@ public func makeComputeMiddleware(
 
 **关键设计**：
 - **滑动窗口**：始终保持最近 5 分钟的 RR 数据
-- **步进触发**：不是每次收到数据就计算，而是每 30 秒触发一次
+- **步进触发**：不是每次收到数据就计算，而是每 10 秒触发一次
 - **级联 dispatch**：`computeStarted` → `hrvComputed` → `featuresExtracted`
 
 ---
