@@ -7,61 +7,58 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		A30000012FF8000000000001 /* HRSenseSimulatorUI in Frameworks */ = {isa = PBXBuildFile; productRef = A30000032FF8000000000003 /* HRSenseSimulatorUI */; };
-		A30000022FF8000000000002 /* HRSenseSimulatorKit in Frameworks */ = {isa = PBXBuildFile; productRef = A30000052FF8000000000005 /* HRSenseSimulatorKit */; };
+		A20000012FF8000000000001 /* HRSenseAppUI in Frameworks */ = {isa = PBXBuildFile; productRef = A20000032FF8000000000003 /* HRSenseAppUI */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		181751312FF7453600072403 /* HRSenseSimulator.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HRSenseSimulator.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		1817510C2FF744B000072403 /* HRSenseApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HRSenseApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		A30000062FF8000000000006 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+		A20000062FF8000000000006 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
-				HRSenseSimulator.entitlements,
 			);
-			target = 181751302FF7453600072403 /* HRSenseSimulator */;
+			target = 1817510B2FF744B000072403 /* HRSenseApp */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		181751332FF7453600072403 /* HRSenseSimulator */ = {
+		1817510E2FF744B000072403 /* HRSenseApp */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				A30000062FF8000000000006 /* PBXFileSystemSynchronizedBuildFileExceptionSet */,
+				A20000062FF8000000000006 /* PBXFileSystemSynchronizedBuildFileExceptionSet */,
 			);
-			path = HRSenseSimulator;
+			path = HRSenseApp;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		1817512E2FF7453600072403 /* Frameworks */ = {
+		181751092FF744B000072403 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A30000022FF8000000000002 /* HRSenseSimulatorKit in Frameworks */,
-				A30000012FF8000000000001 /* HRSenseSimulatorUI in Frameworks */,
+				A20000012FF8000000000001 /* HRSenseAppUI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		181751282FF7453600072403 = {
+		181751032FF744B000072403 = {
 			isa = PBXGroup;
 			children = (
-				181751332FF7453600072403 /* HRSenseSimulator */,
-				181751322FF7453600072403 /* Products */,
+				1817510E2FF744B000072403 /* HRSenseApp */,
+				1817510D2FF744B000072403 /* Products */,
 			);
 			sourceTree = "<group>";
 		};
-		181751322FF7453600072403 /* Products */ = {
+		1817510D2FF744B000072403 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				181751312FF7453600072403 /* HRSenseSimulator.app */,
+				1817510C2FF744B000072403 /* HRSenseApp.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -69,69 +66,68 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		181751302FF7453600072403 /* HRSenseSimulator */ = {
+		1817510B2FF744B000072403 /* HRSenseApp */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 1817513C2FF7453900072403 /* Build configuration list for PBXNativeTarget "HRSenseSimulator" */;
+			buildConfigurationList = 181751172FF744B200072403 /* Build configuration list for PBXNativeTarget "HRSenseApp" */;
 			buildPhases = (
-				1817512D2FF7453600072403 /* Sources */,
-				1817512E2FF7453600072403 /* Frameworks */,
-				1817512F2FF7453600072403 /* Resources */,
+				181751082FF744B000072403 /* Sources */,
+				181751092FF744B000072403 /* Frameworks */,
+				1817510A2FF744B000072403 /* Resources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				181751332FF7453600072403 /* HRSenseSimulator */,
+				1817510E2FF744B000072403 /* HRSenseApp */,
 			);
-			name = HRSenseSimulator;
+			name = HRSenseApp;
 			packageProductDependencies = (
-				A30000032FF8000000000003 /* HRSenseSimulatorUI */,
-				A30000052FF8000000000005 /* HRSenseSimulatorKit */,
+				A20000032FF8000000000003 /* HRSenseAppUI */,
 			);
-			productName = HRSenseSimulator;
-			productReference = 181751312FF7453600072403 /* HRSenseSimulator.app */;
+			productName = HRSenseApp;
+			productReference = 1817510C2FF744B000072403 /* HRSenseApp.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
-		181751292FF7453600072403 /* Project object */ = {
+		181751042FF744B000072403 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 2660;
 				LastUpgradeCheck = 2660;
 				TargetAttributes = {
-					181751302FF7453600072403 = {
+					1817510B2FF744B000072403 = {
 						CreatedOnToolsVersion = 26.6;
 					};
 				};
 			};
-			buildConfigurationList = 1817512C2FF7453600072403 /* Build configuration list for PBXProject "HRSenseSimulator" */;
+			buildConfigurationList = 181751072FF744B000072403 /* Build configuration list for PBXProject "HRSenseApp" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
 				Base,
 			);
-			mainGroup = 181751282FF7453600072403;
+			mainGroup = 181751032FF744B000072403;
 			minimizedProjectReferenceProxies = 1;
 			preferredProjectObjectVersion = 77;
-			productRefGroup = 181751322FF7453600072403 /* Products */;
+			productRefGroup = 1817510D2FF744B000072403 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			packageReferences = (
-				A30000042FF8000000000004 /* XCLocalSwiftPackageReference "../.." */,
+				A20000042FF8000000000004 /* XCLocalSwiftPackageReference "../.." */,
 			);
 			targets = (
-				181751302FF7453600072403 /* HRSenseSimulator */,
+				1817510B2FF744B000072403 /* HRSenseApp */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		1817512F2FF7453600072403 /* Resources */ = {
+		1817510A2FF744B000072403 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -141,7 +137,7 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		1817512D2FF7453600072403 /* Sources */ = {
+		181751082FF744B000072403 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -151,27 +147,22 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		A30000042FF8000000000004 /* XCLocalSwiftPackageReference "../.." */ = {
+		A20000042FF8000000000004 /* XCLocalSwiftPackageReference "../.." */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = ../..;
 		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		A30000032FF8000000000003 /* HRSenseSimulatorUI */ = {
+		A20000032FF8000000000003 /* HRSenseAppUI */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = A30000042FF8000000000004 /* XCLocalSwiftPackageReference "../.." */;
-			productName = HRSenseSimulatorUI;
-		};
-		A30000052FF8000000000005 /* HRSenseSimulatorKit */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = A30000042FF8000000000004 /* XCLocalSwiftPackageReference "../.." */;
-			productName = HRSenseSimulatorKit;
+			package = A20000042FF8000000000004 /* XCLocalSwiftPackageReference "../.." */;
+			productName = HRSenseAppUI;
 		};
 /* End XCSwiftPackageProductDependency section */
 
 /* Begin XCBuildConfiguration section */
-		1817513A2FF7453900072403 /* Debug */ = {
+		181751152FF744B200072403 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -224,18 +215,18 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
-				SDKROOT = macosx;
+				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
 			name = Debug;
 		};
-		1817513B2FF7453900072403 /* Release */ = {
+		181751162FF744B200072403 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -282,105 +273,96 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
-				SDKROOT = macosx;
+				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;
 		};
-		1817513D2FF7453900072403 /* Debug */ = {
+		181751182FF744B200072403 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = UKXWZ3FS84;
-				ENABLE_APP_SANDBOX = YES;
-				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
-				ENABLE_USER_SELECTED_FILES = readonly;
-				CODE_SIGN_ENTITLEMENTS = HRSenseSimulator/HRSenseSimulator.entitlements;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = HRSenseSimulator/Info.plist;
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_FILE = HRSenseApp/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
-					"@executable_path/../Frameworks",
+					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.hrsense.simulator;
+				PRODUCT_BUNDLE_IDENTIFIER = com.hrsense.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
 		};
-		1817513E2FF7453900072403 /* Release */ = {
+		181751192FF744B200072403 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = UKXWZ3FS84;
-				ENABLE_APP_SANDBOX = YES;
-				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
-				ENABLE_USER_SELECTED_FILES = readonly;
-				CODE_SIGN_ENTITLEMENTS = HRSenseSimulator/HRSenseSimulator.entitlements;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = HRSenseSimulator/Info.plist;
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_FILE = HRSenseApp/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
-					"@executable_path/../Frameworks",
+					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.hrsense.simulator;
+				PRODUCT_BUNDLE_IDENTIFIER = com.hrsense.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
 		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		1817512C2FF7453600072403 /* Build configuration list for PBXProject "HRSenseSimulator" */ = {
+		181751072FF744B000072403 /* Build configuration list for PBXProject "HRSenseApp" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				1817513A2FF7453900072403 /* Debug */,
-				1817513B2FF7453900072403 /* Release */,
+				181751152FF744B200072403 /* Debug */,
+				181751162FF744B200072403 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		1817513C2FF7453900072403 /* Build configuration list for PBXNativeTarget "HRSenseSimulator" */ = {
+		181751172FF744B200072403 /* Build configuration list for PBXNativeTarget "HRSenseApp" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				1817513D2FF7453900072403 /* Debug */,
-				1817513E2FF7453900072403 /* Release */,
+				181751182FF744B200072403 /* Debug */,
+				181751192FF744B200072403 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
 	};
-	rootObject = 181751292FF7453600072403 /* Project object */;
+	rootObject = 181751042FF744B000072403 /* Project object */;
 }

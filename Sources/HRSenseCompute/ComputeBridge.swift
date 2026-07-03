@@ -48,7 +48,6 @@ public struct ComputeBridge: Sendable {
 
     /// Extract a 14-element feature vector from HRV metrics.
     public func extractFeatures(from metrics: HRVMetrics) -> [Float] {
-        let values = metrics.toFeatureVector()
         // Cross-validate via C ABI
         var cMetrics = hrs_hrv_metrics_t()
         cMetrics.sdnn = metrics.sdnn
