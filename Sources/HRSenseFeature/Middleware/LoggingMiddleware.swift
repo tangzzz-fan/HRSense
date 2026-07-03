@@ -40,7 +40,21 @@ public func makeLoggingMiddleware() -> Middleware<AppState, Action> {
         let after = store.state
 
         let entry = "\(action) → connection=\(after.connection) hr=\(after.live.currentHeartRate ?? 0) err=\(after.error.map { String(describing: $0) } ?? "nil")"
-        HRSenseLogging.info(.state, entry)
         StateTransitionRecorder.shared.record(entry)
+
+        if shouldEmitBackgroundLog(action: action, lifecycle: after.lifecycle) {
+            HRSenseLogging.info(.state, entry)
+        }
+    }
+}
+
+private func shouldEmitBackgroundLog(action: Action, lifecycle: AppLifecycleState) -> Bool {
+    guard lifecycle == .background else { return true }
+
+    switch action {
+    case .errorOccurred, .restoreInitiated, .restoreConnectionRestored, .restoreFailed, .connectionStateChanged:
+        return true
+    default:
+        return false
     }
 }

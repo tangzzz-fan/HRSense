@@ -12,7 +12,7 @@ public func makeBLEStreamMiddleware(
         next(action)
 
         switch action {
-        case .connectionStateChanged(.connected):
+        case .connectionStateChanged(.connected), .connectionStateChanged(.restoredConnected):
             Task {
                 var lastDispatchTime = Date.distantPast
                 var batch: [HeartRateSample] = []

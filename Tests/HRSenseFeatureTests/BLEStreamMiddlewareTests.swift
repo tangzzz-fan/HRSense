@@ -35,6 +35,16 @@ final class BLEStreamMiddlewareTests: XCTestCase {
         XCTAssertEqual(store.state.live.currentHeartRate, 72)
     }
 
+    func test_dispatchesHeartRateReceived_afterRestoredConnected() async {
+        let repo = FakeDeviceRepository()
+        let store = makeStore(repo: repo)
+        store.dispatch(.connectionStateChanged(.restoredConnected))
+        let sample = HeartRateSample(timestamp: Date(), heartRate: 75)
+        repo.emitHeartRateSample(sample)
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        XCTAssertEqual(store.state.live.currentHeartRate, 75)
+    }
+
     // MARK: - Throttling
 
     func test_throttling_respectsInterval() async {

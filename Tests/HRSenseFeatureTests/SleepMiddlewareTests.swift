@@ -42,6 +42,19 @@ final class SleepMiddlewareTests: XCTestCase {
         XCTAssertEqual(store.state.sleep.status, .idle)
     }
 
+    func test_restoredConnected_alsoStartsSleepMonitoring() {
+        let computeRepo = FakeComputeRepository()
+        let sleepRepo = FakeSleepInferenceRepository()
+        let now = Date(timeIntervalSince1970: 1_725_000_000)
+        let store = makeStore(computeRepo: computeRepo, sleepRepo: sleepRepo, now: now)
+
+        store.dispatch(.connectionStateChanged(.restoredConnected))
+
+        XCTAssertTrue(store.state.sleep.isMonitoring)
+        XCTAssertEqual(store.state.sleep.monitoringStartedAt, now)
+        XCTAssertEqual(store.state.sleep.status, .monitoring)
+    }
+
     func test_historyLoadRequestedQueriesPersistenceAndUpdatesState() async throws {
         let computeRepo = FakeComputeRepository()
         let sleepRepo = FakeSleepInferenceRepository()

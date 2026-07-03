@@ -56,6 +56,7 @@ public enum AppComposition {
         )
 
         let middleware: [Middleware<AppState, Action>] = [
+            makeBackgroundMiddleware(),
             makeConnectionMiddleware(
                 deviceRepo: deviceRepo,
                 backoffProvider: { [bleDataSource] in

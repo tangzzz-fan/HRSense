@@ -25,7 +25,7 @@ public func makeSleepMiddleware(
         next(action)
 
         switch action {
-        case .connectionStateChanged(.connected):
+        case .connectionStateChanged(.connected), .connectionStateChanged(.restoredConnected):
             store.dispatch(.sleep(.monitoringStarted(nowProvider())))
 
         case .connectionStateChanged(.disconnected):

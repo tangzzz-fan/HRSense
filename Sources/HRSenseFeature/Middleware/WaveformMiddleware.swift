@@ -12,7 +12,8 @@ import TGReduxKit
 /// the most recent 5-second window of samples for rendering.
 public func makeWaveformMiddleware(
     waveformRingBuffer: any WaveformRingBufferProtocol,
-    pollInterval: TimeInterval = 0.1  // 10 Hz polling
+    pollInterval: TimeInterval = 0.1,  // 10 Hz polling
+    backgroundPollInterval: TimeInterval = 0.5
 ) -> Middleware<AppState, Action> {
     var pollTaskStarted = false
 
@@ -20,10 +21,17 @@ public func makeWaveformMiddleware(
         next(action)
 
         // Start poll task on first connection to prevent duplicate subscriptions
-        if case .connectionStateChanged(.connected) = action, !pollTaskStarted {
+        if (action == .connectionStateChanged(.connected) || action == .connectionStateChanged(.restoredConnected)),
+           !pollTaskStarted {
             pollTaskStarted = true
             Task {
                 while !Task.isCancelled {
+                    let lifecycle = await MainActor.run { store.state.lifecycle }
+                    if lifecycle == .background {
+                        try? await Task.sleep(nanoseconds: UInt64(backgroundPollInterval * 1_000_000_000))
+                        continue
+                    }
+
                     let samples = waveformRingBuffer.readRecent(durationMs: 5000)
                     let metrics = waveformRingBuffer.metricsSnapshot
 

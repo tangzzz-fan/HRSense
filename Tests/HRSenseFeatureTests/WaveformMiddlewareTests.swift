@@ -36,7 +36,7 @@ final class WaveformMiddlewareTests: XCTestCase {
         Store(
             initialState: AppState(),
             reducer: AppReducer.reduce,
-            middlewares: [makeWaveformMiddleware(waveformRingBuffer: buffer, pollInterval: poll)]
+            middlewares: [makeWaveformMiddleware(waveformRingBuffer: buffer, pollInterval: poll, backgroundPollInterval: 0.2)]
         )
     }
 
@@ -64,6 +64,18 @@ final class WaveformMiddlewareTests: XCTestCase {
         _ = store.state.waveform.metrics
     }
 
+    func test_startsPollingOnRestoredConnected() async {
+        let buffer = FakeWaveformRingBuffer()
+        buffer._samples = [
+            WaveformSample(type: .ecg, sampleRateHz: 128, timestamp: Date(), value: 0.5),
+        ]
+        let store = makeStore(buffer: buffer)
+        store.dispatch(.connectionStateChanged(.restoredConnected))
+        try? await Task.sleep(nanoseconds: 200_000_000)
+        XCTAssertTrue(store.state.waveform.isStreaming)
+        XCTAssertGreaterThan(buffer.readCount, 0)
+    }
+
     func test_stopsPollingOnDisconnected() async {
         let buffer = FakeWaveformRingBuffer()
         let store = makeStore(buffer: buffer)
@@ -78,6 +90,23 @@ final class WaveformMiddlewareTests: XCTestCase {
         // This is a weak signal test; the important part is that the middleware doesn't crash.
         let diff = readsAfter - readsBefore
         XCTAssertLessThanOrEqual(diff, 6, "Poll should slow/stop after disconnect, got \(diff) extra reads")
+    }
+
+    func test_backgroundPollingDropsToLowerCadence() async {
+        let buffer = FakeWaveformRingBuffer()
+        buffer._samples = [
+            WaveformSample(type: .ecg, sampleRateHz: 128, timestamp: Date(), value: 0.5),
+        ]
+        let store = makeStore(buffer: buffer)
+        store.dispatch(.connectionStateChanged(.connected))
+        try? await Task.sleep(nanoseconds: 220_000_000)
+        let readsBeforeBackground = buffer.readCount
+
+        store.dispatch(.didEnterBackground)
+        try? await Task.sleep(nanoseconds: 250_000_000)
+        let readsAfterBackground = buffer.readCount
+
+        XCTAssertLessThanOrEqual(readsAfterBackground - readsBeforeBackground, 2)
     }
 
     // MARK: - Type selection

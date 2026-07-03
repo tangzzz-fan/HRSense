@@ -229,6 +229,104 @@ restoreConnection success
 - 恢复主链路的 repository 编排骨架
 - 最小身份校验
 - 恢复成功后的 `restoredConnected` 状态
+- 最小版 `BackgroundMiddleware` 后台降级策略
+
+---
+
+## 6.1 最小版 BackgroundMiddleware 设计
+
+文件：
+
+- `Sources/HRSenseFeature/Middleware/BackgroundMiddleware.swift`
+
+### 设计目标
+
+这一版不是“完整后台治理系统”，而是一个 **最小可落地、能马上带来收益** 的后台策略层。
+
+它优先解决三件事：
+
+1. 后台时不要继续做不必要的 UI 渲染
+2. 后台时不要继续跑通用 stress 推理链路
+3. 后台时如果没有显式睡眠监测，不要继续做 HRV 计算
+
+### 当前策略
+
+最小版 `BackgroundExecutionPolicy.minimal` 包含四条规则：
+
+1. `pauseWaveformRenderingInBackground = true`
+2. `pauseStressInferenceInBackground = true`
+3. `pauseComputeInBackgroundUnlessSleepMonitoring = true`
+4. `stopUserScanningOnBackground = true`
+
+### 实际拦截的 action
+
+后台时直接丢弃：
+
+- `waveformSamplesReceived`
+- `waveformMetricsUpdated`
+- `featuresExtracted`
+- `inferenceStarted`
+- `inferenceCompleted`
+
+后台且 **未开启睡眠监测** 时额外丢弃：
+
+- `computeStarted`
+- `hrvComputed`
+
+进入后台时如果用户还停留在扫描页，则自动发出：
+
+- `stopScanning`
+
+### 为什么这样设计
+
+这是一个明显偏保守、偏务实的版本。
+
+原因是：
+
+- BLE 恢复链路本身必须继续保留
+- 睡眠监测是当前项目里最有业务价值的后台计算场景，因此不能一刀切停掉全部 compute
+- stress inference 在后台没有直接用户可见价值，优先停掉更合理
+- 波形渲染属于典型前台展示能力，后台继续刷新只会消耗 CPU 和内存
+
+### 当前没有做的事
+
+最小版 **故意没有** 直接做这些能力：
+
+- 不做完整任务优先级调度
+- 不做后台写盘批处理控制
+- 不做 OTA 专项后台策略
+- 不做可配置的用户模式切换（例如“后台继续睡眠分析”开关）
+- 不做全局日志级别动态切换器
+
+这些能力后续仍可继续演进，但不影响本阶段先把后台 BLE 的资源使用收敛住。
+
+### 与其他 middleware 的协作
+
+为了让最小版策略真的带来性能收益，当前还配合了两处补强：
+
+1. `WaveformMiddleware`
+   - 前台约 10Hz 轮询
+   - 后台切到更低频率轮询
+   - 避免仅仅“丢 action”但 CPU 仍持续空转
+
+2. `LoggingMiddleware`
+   - 后台只保留关键状态日志
+   - 普通 action 不再持续写 info 日志
+
+这意味着最小版后台策略并不是只有一个文件，而是：
+
+- `BackgroundMiddleware` 负责统一决策入口
+- 高频模块各自做最少量的配合降级
+
+### 恢复链路兼容性
+
+M10 新增 `restoredConnected` 后，以下中间件都已补齐恢复态入口：
+
+- `BLEStreamMiddleware`
+- `WaveformMiddleware`
+- `SleepMiddleware`
+
+否则会出现“恢复状态成功了，但数据流和监测链路没有继续运行”的假恢复现象。
 
 ### 仍待继续
 
