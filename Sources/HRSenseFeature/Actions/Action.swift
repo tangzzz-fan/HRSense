@@ -16,6 +16,7 @@ public enum Action: Equatable, Sendable {
 
     // MARK: Connection
     case connectionStateChanged(ConnectionState)
+    case deviceInfoUpdated(DeviceInfo)  // M3: device info after handshake
 
     // MARK: Data
     case heartRateReceived([HeartRateSample])
@@ -36,4 +37,28 @@ public enum Action: Equatable, Sendable {
 
     // MARK: Misc
     case clearSamples
+}
+
+// MARK: - CustomStringConvertible (for LoggingMiddleware)
+
+extension Action: CustomStringConvertible {
+    public var description: String {
+        switch self {
+        case .startScanning: return "startScanning"
+        case .stopScanning: return "stopScanning"
+        case .deviceDiscovered(let d): return "deviceDiscovered(\(d.name))"
+        case .connect(let id): return "connect(\(id))"
+        case .disconnect: return "disconnect"
+        case .connectionStateChanged(let s): return "connectionStateChanged(\(s))"
+        case .deviceInfoUpdated(let i): return "deviceInfoUpdated(\(i.name) fw=\(i.firmwareVersion))"
+        case .heartRateReceived(let s): return "heartRateReceived(\(s.count) samples)"
+        case .deviceEvent: return "deviceEvent"
+        case .hrvComputed: return "hrvComputed"
+        case .inferenceCompleted: return "inferenceCompleted"
+        case .otaStateChanged(let o): return "otaStateChanged(\(o.phase))"
+        case .errorOccurred(let e): return "errorOccurred(\(e))"
+        case .dismissError: return "dismissError"
+        case .clearSamples: return "clearSamples"
+        }
+    }
 }

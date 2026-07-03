@@ -1,5 +1,6 @@
 import Foundation
 import HRSenseCore
+import HRSenseProtocol
 
 /// Implements DeviceRepository by orchestrating BLECentralDataSource + protocol pipeline.
 ///
@@ -28,9 +29,15 @@ public final class DeviceRepositoryImpl: DeviceRepository, @unchecked Sendable {
         bleDataSource.heartRateStream
     }
 
+    public let deviceInfoStream: AsyncStream<DeviceInfo>
+    private let deviceInfoContinuation: AsyncStream<DeviceInfo>.Continuation
+
     public init(bleDataSource: BLECentralDataSource) {
         self.bleDataSource = bleDataSource
         self.metricsCollector = bleDataSource.metricsCollector
+        var cont: AsyncStream<DeviceInfo>.Continuation!
+        self.deviceInfoStream = AsyncStream { cont = $0 }
+        self.deviceInfoContinuation = cont
     }
 
     public func startScanning() async {
@@ -52,4 +59,97 @@ public final class DeviceRepositoryImpl: DeviceRepository, @unchecked Sendable {
     public func sendCommand(_ opcode: UInt8, payload: Data) async throws -> Data {
         try await bleDataSource.sendCommand(opcode, payload: payload)
     }
+
+    // MARK: - Handshake (HELLO → HELLO_ACK → START_STREAM)
+
+    /// Perform the full handshake sequence after BLE connection + service discovery.
+    ///
+    /// Flow (doc 03 §7):
+    ///   1. Wait for connection state to reach `.handshaking` (service discovery complete).
+    ///   2. Send HELLO (App→Dev) with protocol versions + capabilities.
+    ///   3. Await HELLO_ACK (Dev→App) with device info + negotiated version + capabilities.
+    ///   4. Parse device info, mark t0.
+    ///   5. Send START_STREAM.
+    ///   6. Transition to `.connected`.
+    ///
+    /// - Returns: the parsed DeviceInfo from HELLO_ACK.
+    public func performHandshake() async throws -> DeviceInfo {
+        // Wait for handshaking state (service discovery complete, characteristics ready)
+        var found = false
+        for await state in connectionStateStream {
+            if state == .handshaking { found = true; break }
+            if state == .disconnected || state == .disconnecting {
+                throw AppError.connectionLost
+            }
+        }
+        guard found else { throw AppError.connectionTimeout }
+
+        // Step 1: Send HELLO
+        HRSenseLogging.info(.protoCmd, "HANDSHAKE: sending HELLO")
+        let appCaps = Capabilities(rawValue: AppCapabilities.current)
+        let helloResp = try await bleDataSource.sendCommandAndWait(
+            Command.hello(
+                versions: ProtocolVersion.supportedVersions,
+                capabilities: appCaps,
+                needsACK: true
+            ),
+            timeout: 5.0
+        )
+
+        // Step 2: Parse HELLO_ACK
+        guard case .command(let ack) = helloResp,
+              ack.opCode == .helloAck,
+              ack.flags.isResponse else {
+            throw AppError.handshakeFailed(reason: "Invalid HELLO_ACK response")
+        }
+        HRSenseLogging.info(.protoCmd, "HANDSHAKE: received HELLO_ACK")
+
+        // Extract device info from HELLO_ACK params
+        var version: UInt8 = 1
+        var caps: Capabilities = Capabilities(rawValue: 0)
+        var model = ""
+        var fw = ""
+
+        for param in ack.params {
+            switch param.tag {
+            case .heartRate:  // tag 0x01 reused for protocol version
+                if let v = param.value.first { version = v }
+            case .battery:    // tag 0x04 reused for model name
+                model = String(bytes: param.value, encoding: .utf8) ?? ""
+            case .sensorStatus:  // tag 0x05 reused for fw version
+                fw = String(bytes: param.value, encoding: .utf8) ?? ""
+            default:
+                break
+            }
+        }
+        caps = Capabilities(rawValue: UInt32((ack.params.first(where: { $0.tag == .capabilities })?.value.first) ?? 0) | caps.rawValue)
+
+        // Use the peripheral identifier from the data source
+        let deviceInfo = DeviceInfo(
+            peripheralIdentifier: UUID(),  // will be set by connection middleware from discovered device
+            name: "HRSense Device",
+            model: model.isEmpty ? "Unknown" : model,
+            firmwareVersion: fw.isEmpty ? "0.0.0" : fw,
+            protocolVersion: version,
+            capabilities: caps.rawValue
+        )
+        bleDataSource.dataParser.markT0()
+        deviceInfoContinuation.yield(deviceInfo)
+        HRSenseLogging.info(.protoCmd, "HANDSHAKE: device=\(model) fw=\(fw) version=\(version) caps=0x\(String(caps.rawValue, radix: 16))")
+
+        // Step 3: Send START_STREAM
+        HRSenseLogging.info(.protoCmd, "HANDSHAKE: sending START_STREAM")
+        _ = try await bleDataSource.sendCommandAndWait(
+            Command.startStream(sampleKinds: [0x01]),
+            timeout: 5.0
+        )
+
+        return deviceInfo
+    }
+}
+
+/// App-side capabilities to declare in HELLO.
+private enum AppCapabilities {
+    /// v1 app: heart rate + RR intervals + OTA + waveform support
+    static let current: UInt32 = (1 << 0) | (1 << 1) | (1 << 2) | (1 << 9) | (1 << 10)
 }

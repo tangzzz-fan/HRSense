@@ -1,15 +1,17 @@
 import SwiftUI
 import HRSenseCore
+import TGReduxKit
 
 /// Root view that composes all sub-views and connects to the Redux store.
 public struct RootView: View {
-    @EnvironmentObject private var store: StoreWrapper<AppState, Action>
+    @Environment(Store<AppState, Action>.self) private var store
 
     public init() {}
 
     public var body: some View {
         VStack(spacing: 16) {
             connectionStatusView
+            deviceInfoView
             heartRateView
             errorBannerView
             Spacer()
@@ -44,6 +46,17 @@ public struct RootView: View {
             }
         }
         .padding(.horizontal)
+    }
+
+    // MARK: - Device info
+
+    @ViewBuilder
+    private var deviceInfoView: some View {
+        if let device = store.state.device {
+            Text("\(device.model) v\(device.firmwareVersion)")
+                .font(.caption2)
+                .foregroundColor(.secondary)
+        }
     }
 
     // MARK: - Heart rate
@@ -114,24 +127,5 @@ public struct RootView: View {
         case .disconnecting: return "Disconnecting..."
         case .disconnected: return "Disconnected"
         }
-    }
-}
-
-// MARK: - Store wrapper (erase Store generic types for EnvironmentObject)
-
-/// Type-erased store wrapper for SwiftUI EnvironmentObject injection.
-/// TGReduxKit's Store<State, Action> is used directly via its
-/// `storeProvider` modifier; this wrapper exists for preview/test contexts.
-public final class StoreWrapper<State: Equatable & Sendable, A: Equatable & Sendable>: ObservableObject {
-    @Published var state: State
-    private let _dispatch: (A) -> Void
-
-    public init(state: State, dispatch: @escaping (A) -> Void) {
-        self.state = state
-        self._dispatch = dispatch
-    }
-
-    public func dispatch(_ action: A) {
-        _dispatch(action)
     }
 }

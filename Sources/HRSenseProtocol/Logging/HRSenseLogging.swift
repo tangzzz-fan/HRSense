@@ -157,4 +157,9 @@ public enum HRSenseLogging {
     public static func warn(_ category: HRSenseLogCategory, _ message: @autoclosure () -> String) {
         LoggingRegistry.shared.logger.log(.error, category: category, message())
     }
+
+    /// Activate the OSLog-backed logger (call once at app startup).
+    public static func activateOSLog(subsystem: String = "com.hrsense") {
+        LoggingRegistry.shared.logger = OSLogHRSenseLogger(subsystem: subsystem)
+    }
 }

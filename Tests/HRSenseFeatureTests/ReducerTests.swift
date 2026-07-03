@@ -132,4 +132,14 @@ final class ReducerTests: XCTestCase {
         AppReducer.reduce(state: &state, action: .otaStateChanged(ota))
         XCTAssertEqual(state.ota.progress, 0.5)
     }
+
+    // MARK: - Device info
+
+    func test_deviceInfoUpdated_setsDevice() {
+        let device = DeviceInfo(peripheralIdentifier: UUID(), name: "HRSense", model: "M2",
+                                firmwareVersion: "2.0", protocolVersion: 1, capabilities: 0)
+        var state = AppState()
+        AppReducer.reduce(state: &state, action: .deviceInfoUpdated(device))
+        XCTAssertEqual(state.device, device)
+    }
 }

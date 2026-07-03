@@ -35,6 +35,7 @@ public final class BLECentralDataSource: NSObject, @unchecked Sendable {
     private var connectionStateContinuation: AsyncStream<ConnectionState>.Continuation?
     private var discoveredDevicesContinuation: AsyncStream<DeviceInfo>.Continuation?
     private var heartRateContinuation: AsyncStream<HeartRateSample>.Continuation?
+    private var commandResponseContinuation: CheckedContinuation<DecodedFrame, Error>?
 
     public let connectionStateStream: AsyncStream<ConnectionState>
     public let discoveredDevicesStream: AsyncStream<DeviceInfo>
@@ -44,6 +45,9 @@ public final class BLECentralDataSource: NSObject, @unchecked Sendable {
     public let metricsCollector = MetricsCollector()
     public let connectionStateMachine = BLEConnectionStateMachine()
     public var mtu: Int = 185
+
+    /// Persistent FrameAssembler — one per connection to correctly reassemble multi-fragment frames.
+    private var frameAssembler = FrameAssembler()
 
     public override init() {
         var cc: AsyncStream<ConnectionState>.Continuation!
@@ -109,6 +113,58 @@ public final class BLECentralDataSource: NSObject, @unchecked Sendable {
         }
     }
 
+    /// Send a control command and wait for an asynchronous response frame
+    /// (command, ack, or event) delivered via the notify channel.
+    ///
+    /// The request is sent via Control/Write (0003). The response arrives on the
+    /// Data/Notify (0002) channel as a decoded `DecodedFrame`. This method bridges
+    /// the two channels: it writes on 0003, then blocks the caller (via
+    /// CheckedContinuation) until the next matching response arrives on 0002.
+    ///
+    /// - Parameters:
+    ///   - command: the encoded command payload (with opcode).
+    ///   - timeout: maximum wait duration in seconds.
+    /// - Returns: the decoded response frame.
+    /// - Throws: AppError.commandTimeout if no response within the timeout.
+    public func sendCommandAndWait(_ command: Command, timeout: TimeInterval = 5.0) async throws -> DecodedFrame {
+        let body = CommandCodec.encode(command)
+        let seq = nextSeq()
+        let fragments = FrameEncoder.encode(type: .command, body: body, seq: seq, mtu: mtu)
+
+        return try await withCheckedThrowingContinuation { (cont: CheckedContinuation<DecodedFrame, Error>) in
+            bleQueue.async { [weak self] in
+                guard let self else { cont.resume(throwing: AppError.connectionLost); return }
+                guard self._connectedPeripheral != nil, self._writeCharacteristic != nil else {
+                    cont.resume(throwing: AppError.deviceNotFound); return
+                }
+
+                // Register the continuation — the next command/ack/event on notify will resume it.
+                self.commandResponseContinuation = cont
+
+                // Write each fragment on the Control (0003) characteristic.
+                for frag in fragments {
+                    self._connectedPeripheral!.writeValue(Data(frag), for: self._writeCharacteristic!, type: .withResponse)
+                }
+                HRSenseLogging.debug(.protoCmd, "WRITE(0003) CMD opcode=0x\(String(command.opCode.rawValue, radix: 16)) seq=\(seq) fragments=\(fragments.count)")
+            }
+
+            // Timeout: cancel if no response within timeout window.
+            bleQueue.asyncAfter(deadline: .now() + timeout) { [weak self] in
+                guard let self, let existing = self.commandResponseContinuation else { return }
+                self.commandResponseContinuation = nil
+                existing.resume(throwing: AppError.commandTimeout(opcode: command.opCode.rawValue))
+            }
+        }
+    }
+
+    /// Rolling frame sequence number (0–255).
+    private var _seq: UInt8 = 0
+    private func nextSeq() -> UInt8 {
+        let s = _seq
+        _seq = _seq &+ 1
+        return s
+    }
+
     // MARK: - OTA window write (0005 OTA Data, Write Without Response)
 
     /// Write a firmware image chunk via OTA Data (0005).
@@ -144,14 +200,28 @@ public final class BLECentralDataSource: NSObject, @unchecked Sendable {
     private func handleNotifyData(_ data: Data) {
         metricsCollector.recordBytesReceived(data.count)
         HRSenseLogging.debug(.bleRaw, HexFormat.canonicalHexDump(data))
-        let assembler = FrameAssembler()
-        for frame in assembler.feed(data) {
+        for frame in frameAssembler.feed(data) {
             switch frame {
             case .data(let sample):
                 metricsCollector.recordSampleReceived()
                 heartRateContinuation?.yield(dataParser.parseSample(sample))
-            case .command, .ack, .event, .waveform:
-                break
+            case .command(let command):
+                // Device→App commands (e.g. HELLO_ACK, INFO, ERROR)
+                HRSenseLogging.info(.protoCmd, "NOTIFY command opcode=0x\(String(command.opCode.rawValue, radix: 16))")
+                if let cont = commandResponseContinuation {
+                    commandResponseContinuation = nil
+                    cont.resume(returning: .command(command))
+                }
+            case .ack(let ack):
+                HRSenseLogging.info(.protoCmd, "NOTIFY ack seq=\(ack.seq) opcode=0x\(String(ack.opcode, radix: 16))")
+                if let cont = commandResponseContinuation {
+                    commandResponseContinuation = nil
+                    cont.resume(returning: .ack(ack))
+                }
+            case .event(let event):
+                HRSenseLogging.info(.protoCmd, "NOTIFY event")
+            case .waveform(let block):
+                HRSenseLogging.debug(.bleRaw, "NOTIFY waveform blockSeq=\(block.blockSeq)")
             }
         }
     }
@@ -181,6 +251,14 @@ extension BLECentralDataSource: CBCentralManagerDelegate {
     }
     public func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
         _connectedPeripheral = nil; _notifyCharacteristic = nil; _writeCharacteristic = nil; _otaDataCharacteristic = nil
+        // Cancel any pending command response
+        if let cont = commandResponseContinuation {
+            commandResponseContinuation = nil
+            cont.resume(throwing: AppError.connectionLost)
+        }
+        // Reset frame assembler and data parser for the next connection
+        frameAssembler.reset()
+        dataParser.resetT0()
         emitState(.disconnected)
     }
 }
@@ -206,6 +284,8 @@ extension BLECentralDataSource: CBPeripheralDelegate {
             default: break
             }
         }
+        // Service discovery complete — ready for handshake
+        emitState(.handshaking)
     }
     public func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
         guard error == nil, let data = characteristic.value, characteristic.uuid == notifyCharUUID else { return }

@@ -14,16 +14,23 @@ final class FakeDeviceRepository: DeviceRepository, @unchecked Sendable {
     private let connCont: AsyncStream<ConnectionState>.Continuation
     private let discCont: AsyncStream<DeviceInfo>.Continuation
     private let hrCont: AsyncStream<HeartRateSample>.Continuation
+    private let devInfoCont: AsyncStream<DeviceInfo>.Continuation
 
     let connectionStateStream: AsyncStream<ConnectionState>
     let discoveredDevicesStream: AsyncStream<DeviceInfo>
     let heartRateStream: AsyncStream<HeartRateSample>
+    let deviceInfoStream: AsyncStream<DeviceInfo>
 
     // Spy
     var scanCallCount = 0
     var connectCallIDs: [UUID] = []
     var disconnectCallCount = 0
     var connectedIDs: [UUID] = []
+    var handshakeCallCount = 0
+    var handshakeResult: Result<DeviceInfo, Error> = .success(
+        DeviceInfo(peripheralIdentifier: UUID(), name: "Test", model: "M1",
+                   firmwareVersion: "1.0", protocolVersion: 1, capabilities: 0)
+    )
 
     init() {
         var cc: AsyncStream<ConnectionState>.Continuation!
@@ -32,6 +39,8 @@ final class FakeDeviceRepository: DeviceRepository, @unchecked Sendable {
         self.discoveredDevicesStream = AsyncStream { dc = $0 }; self.discCont = dc!
         var hc: AsyncStream<HeartRateSample>.Continuation!
         self.heartRateStream = AsyncStream { hc = $0 }; self.hrCont = hc!
+        var dic: AsyncStream<DeviceInfo>.Continuation!
+        self.deviceInfoStream = AsyncStream { dic = $0 }; self.devInfoCont = dic!
     }
 
     func startScanning() async {
@@ -53,6 +62,17 @@ final class FakeDeviceRepository: DeviceRepository, @unchecked Sendable {
         return payload
     }
 
+    func performHandshake() async throws -> DeviceInfo {
+        handshakeCallCount += 1
+        switch handshakeResult {
+        case .success(let info):
+            devInfoCont.yield(info)
+            return info
+        case .failure(let error):
+            throw error
+        }
+    }
+
     // Test helpers
     func emitConnectionState(_ state: ConnectionState) {
         currentConnectionState = state
@@ -65,6 +85,10 @@ final class FakeDeviceRepository: DeviceRepository, @unchecked Sendable {
 
     func emitHeartRateSample(_ sample: HeartRateSample) {
         hrCont.yield(sample)
+    }
+
+    func emitDeviceInfo(_ info: DeviceInfo) {
+        devInfoCont.yield(info)
     }
 }
 

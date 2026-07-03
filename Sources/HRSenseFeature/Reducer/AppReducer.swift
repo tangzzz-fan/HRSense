@@ -40,6 +40,9 @@ public enum AppReducer {
                 state.device = nil
             }
 
+        case .deviceInfoUpdated(let info):
+            state.device = info
+
         case .heartRateReceived(let samples):
             state.live.recentSamples.append(contentsOf: samples)
             // Keep bounded to 600 entries (~10 min @ 1 Hz)

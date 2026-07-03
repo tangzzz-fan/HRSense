@@ -10,3 +10,17 @@ public enum ConnectionState: Equatable, Sendable {
     case disconnecting
     case disconnected
 }
+
+extension ConnectionState: CustomStringConvertible {
+    public var description: String {
+        switch self {
+        case .idle: "idle"
+        case .scanning: "scanning"
+        case .connecting: "connecting"
+        case .handshaking: "handshaking"
+        case .connected: "connected"
+        case .disconnecting: "disconnecting"
+        case .disconnected: "disconnected"
+        }
+    }
+}

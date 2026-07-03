@@ -79,15 +79,17 @@ extension Command {
         firmwareVersion: String
     ) -> Command {
         // Pack version + caps + model + fw into TLV params
-        // Using tag 0x01 for version, raw tags for model/fw for now
-        var params: [TLVRecord] = [
-            TLVRecord(tag: .heartRate, value: [version]),  // reuse for version
-        ]
-        // Encode model as bytes
+        // tag 0x01 = protocol version, 0x07 = capabilities, 0x04 = model, 0x05 = fw
+        var capsLE = capabilities.rawValue.littleEndian
+        let capsBytes = Swift.withUnsafeBytes(of: &capsLE) { Array($0) }
         let modelBytes = Array(model.utf8)
-        params.append(TLVRecord(tag: .battery, value: modelBytes))  // reuse battery tag for model name
         let fwBytes = Array(firmwareVersion.utf8)
-        params.append(TLVRecord(tag: .sensorStatus, value: fwBytes)) // reuse for fw version
+        let params: [TLVRecord] = [
+            TLVRecord(tag: .heartRate, value: [version]),
+            TLVRecord(tag: .capabilities, value: capsBytes),
+            TLVRecord(tag: .battery, value: modelBytes),
+            TLVRecord(tag: .sensorStatus, value: fwBytes),
+        ]
         return Command(
             opCode: .helloAck,
             flags: CommandFlags(isResponse: true),

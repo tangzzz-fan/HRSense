@@ -9,6 +9,7 @@
 ///   0x04 battery       — u8, %
 ///   0x05 sensorStatus  — u8, bitmask
 ///   0x06 sampleSeq     — u32, sample sequence number
+///   0x07 capabilities  — u32, capability bitmask (also used in L3 HELLO_ACK)
 ///
 /// Waveform tags (0x10–0x15): see spec 0003 §3.1
 public enum TLVTag: UInt8, Equatable, Sendable, CaseIterable {
@@ -18,6 +19,7 @@ public enum TLVTag: UInt8, Equatable, Sendable, CaseIterable {
     case battery     = 0x04
     case sensorStatus = 0x05
     case sampleSeq   = 0x06
+    case capabilities = 0x07
 
     // Waveform (spec 0003 §3.1)
     case waveformType   = 0x10
