@@ -57,6 +57,30 @@ public func makeConnectionMiddleware(
         }
 
         switch action {
+        case .restoreInitiated(let peripheralIDs):
+            next(action)
+            let cachedDevice = store.state.device
+            Task {
+                do {
+                    _ = try await deviceRepo.restoreConnection(cachedDevice: cachedDevice)
+                    await MainActor.run {
+                        store.dispatch(.restoreConnectionRestored(peripheralIDs: peripheralIDs))
+                    }
+                } catch {
+                    HRSenseLogging.error(.state, "BLE restore failed: \(error.localizedDescription)")
+                    let message: String
+                    if let appError = error as? AppError,
+                       case .handshakeFailed(let reason) = appError {
+                        message = reason
+                    } else {
+                        message = (error as? AppError)?.localizedDescription ?? error.localizedDescription
+                    }
+                    await MainActor.run {
+                        store.dispatch(.restoreFailed(reason: message))
+                    }
+                }
+            }
+
         case .startScanning:
             next(action)
             Task {

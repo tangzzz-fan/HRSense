@@ -100,6 +100,7 @@ public final class BLECentralDataSource: NSObject, @unchecked Sendable {
     private var _notifyCharacteristic: CBCharacteristic?
     private var _writeCharacteristic: CBCharacteristic?
     private var _otaDataCharacteristic: CBCharacteristic?
+    private var _latestDeviceInfoData: Data?
     private var _handshakeReadinessGate = HandshakeReadinessGate()
     private var _pendingCommandCoordinator = PendingCommandTimeoutCoordinator()
 
@@ -135,6 +136,10 @@ public final class BLECentralDataSource: NSObject, @unchecked Sendable {
             guard let identifier = _connectedPeripheral?.identifier else { return nil }
             return _discoveredPeripherals[identifier]?.1
         }
+    }
+
+    public var latestDeviceInfoData: Data? {
+        bleQueue.sync { _latestDeviceInfoData }
     }
 
     /// Persistent FrameAssembler — one per connection to correctly reassemble multi-fragment frames.
@@ -204,6 +209,27 @@ public final class BLECentralDataSource: NSObject, @unchecked Sendable {
                 self._discoveredPeripherals[peripheral.identifier] = (peripheral, deviceInfo)
             }
             self.emitState(.connected)
+        }
+    }
+
+    public func beginRestoredConnectionValidation() {
+        bleQueue.async { [weak self] in
+            guard let self, let peripheral = self._connectedPeripheral else { return }
+            self._handshakeReadinessGate.reset()
+            self._latestDeviceInfoData = nil
+            peripheral.delegate = self
+            self.emitState(.restoredValidating)
+            peripheral.discoverServices([self.serviceUUID])
+        }
+    }
+
+    public func completeRestoration(with deviceInfo: DeviceInfo) {
+        bleQueue.async { [weak self] in
+            guard let self else { return }
+            if let peripheral = self._connectedPeripheral {
+                self._discoveredPeripherals[peripheral.identifier] = (peripheral, deviceInfo)
+            }
+            self.emitState(.restoredConnected)
         }
     }
 
@@ -536,6 +562,7 @@ extension BLECentralDataSource: CBCentralManagerDelegate {
         _notifyCharacteristic = nil
         _writeCharacteristic = nil
         _otaDataCharacteristic = nil
+        _latestDeviceInfoData = nil
         _handshakeReadinessGate.reset()
         _pendingCommandCoordinator.clear()
         // Cancel any pending command response
@@ -601,8 +628,16 @@ extension BLECentralDataSource: CBPeripheralDelegate {
         }
     }
     public func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
-        guard error == nil, let data = characteristic.value, characteristic.uuid == notifyCharUUID else { return }
-        handleNotifyData(data)
+        guard error == nil, let data = characteristic.value else { return }
+
+        switch characteristic.uuid {
+        case notifyCharUUID:
+            handleNotifyData(data)
+        case infoCharUUID:
+            _latestDeviceInfoData = data
+        default:
+            break
+        }
     }
     public func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {}
 }

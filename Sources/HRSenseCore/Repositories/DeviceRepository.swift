@@ -46,4 +46,9 @@ public protocol DeviceRepository: AnyObject, Sendable {
     /// Sends HELLO → awaits HELLO_ACK → sends START_STREAM.
     /// - Returns: the parsed DeviceInfo from the HELLO_ACK response.
     func performHandshake() async throws -> DeviceInfo
+
+    /// Resume a CoreBluetooth-restored BLE session by rediscovering services,
+    /// validating the restored peripheral identity, and re-running handshake
+    /// if needed.
+    func restoreConnection(cachedDevice: DeviceInfo?) async throws -> DeviceInfo
 }

@@ -155,6 +155,29 @@ public final class DeviceRepositoryImpl: DeviceRepository, @unchecked Sendable {
         return deviceInfo
     }
 
+    public func restoreConnection(cachedDevice: DeviceInfo?) async throws -> DeviceInfo {
+        metricsCollector.recordConnectionAttempt()
+
+        guard bleDataSource.connectedPeripheralIdentifier != nil else {
+            throw AppError.deviceNotFound
+        }
+
+        bleDataSource.beginRestoredConnectionValidation()
+
+        let restoredInfo = try await readRestoredDeviceInfo(timeout: 3.0)
+        if let cachedDevice, let restoredInfo {
+            try validateRestoredDevice(restoredInfo, against: cachedDevice)
+        }
+
+        let deviceInfo = try await performHandshake()
+        if let cachedDevice {
+            try validateRestoredDevice(deviceInfo, against: cachedDevice)
+        }
+
+        bleDataSource.completeRestoration(with: deviceInfo)
+        return deviceInfo
+    }
+
     private func waitUntilHandshakeReady(timeout: TimeInterval) async throws {
         let deadline = ContinuousClock.now + .seconds(timeout)
 
@@ -174,6 +197,64 @@ public final class DeviceRepositoryImpl: DeviceRepository, @unchecked Sendable {
         }
 
         throw AppError.connectionTimeout
+    }
+
+    private func readRestoredDeviceInfo(timeout: TimeInterval) async throws -> DeviceInfo? {
+        let deadline = ContinuousClock.now + .seconds(timeout)
+
+        while ContinuousClock.now < deadline {
+            if let data = bleDataSource.latestDeviceInfoData,
+               let info = parseRestoredDeviceInfo(from: data) {
+                return info
+            }
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+
+        return nil
+    }
+
+    private func parseRestoredDeviceInfo(from data: Data) -> DeviceInfo? {
+        guard let rawObject = try? JSONSerialization.jsonObject(with: data),
+              let object = rawObject as? [String: String] else {
+            return nil
+        }
+
+        let peripheralIdentifier = bleDataSource.connectedPeripheralIdentifier ?? UUID()
+        let name = bleDataSource.connectedDeviceInfo?.name ?? "HRSense Peripheral"
+        let model = object["model"] ?? "Unknown"
+        let firmwareVersion = object["firmwareVersion"] ?? "0.0.0"
+        let protocolVersion = UInt8(object["protocolVersion"] ?? "") ?? 0
+
+        return DeviceInfo(
+            peripheralIdentifier: peripheralIdentifier,
+            name: name,
+            model: model,
+            firmwareVersion: firmwareVersion,
+            protocolVersion: protocolVersion,
+            capabilities: bleDataSource.connectedDeviceInfo?.capabilities ?? 0
+        )
+    }
+
+    private func validateRestoredDevice(_ restoredDevice: DeviceInfo, against cachedDevice: DeviceInfo) throws {
+        guard restoredDevice.peripheralIdentifier == cachedDevice.peripheralIdentifier else {
+            throw AppError.handshakeFailed(reason: "Restored peripheral identifier mismatch")
+        }
+
+        if !cachedDevice.model.isEmpty, !restoredDevice.model.isEmpty, restoredDevice.model != cachedDevice.model {
+            throw AppError.handshakeFailed(reason: "Restored device model mismatch")
+        }
+
+        if cachedDevice.protocolVersion != 0,
+           restoredDevice.protocolVersion != 0,
+           restoredDevice.protocolVersion != cachedDevice.protocolVersion {
+            throw AppError.handshakeFailed(reason: "Restored device protocol version mismatch")
+        }
+
+        if cachedDevice.capabilities != 0,
+           restoredDevice.capabilities != 0,
+           restoredDevice.capabilities != cachedDevice.capabilities {
+            throw AppError.handshakeFailed(reason: "Restored device capabilities mismatch")
+        }
     }
 }
 

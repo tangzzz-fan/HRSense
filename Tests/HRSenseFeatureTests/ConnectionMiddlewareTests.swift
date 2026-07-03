@@ -92,7 +92,7 @@ final class ConnectionMiddlewareTests: XCTestCase {
         XCTAssertEqual(store.state.device?.firmwareVersion, "2.0")
     }
 
-    func test_restoredPeripheralIDsStream_dispatchesRestoreInitiated() async {
+    func test_restoredPeripheralIDsStream_runsRestoreFlow() async {
         let repo = FakeDeviceRepository()
         let store = makeStore(repo: repo)
         let restoredID = UUID()
@@ -101,8 +101,23 @@ final class ConnectionMiddlewareTests: XCTestCase {
         repo.emitRestoredPeripheralIDs([restoredID])
         try? await Task.sleep(nanoseconds: 200_000_000)
 
-        XCTAssertEqual(store.state.lifecycle, .restoring)
-        XCTAssertEqual(store.state.connection, .restored)
+        XCTAssertEqual(repo.restoreCallCount, 1)
+        XCTAssertEqual(store.state.connection, .restoredConnected)
+        XCTAssertEqual(store.state.lifecycle, .active)
+    }
+
+    func test_restoreFailure_dispatchesRestoreFailed() async {
+        let repo = FakeDeviceRepository()
+        repo.restoreResult = .failure(AppError.handshakeFailed(reason: "Restored device model mismatch"))
+        let store = makeStore(repo: repo)
+
+        store.dispatch(.startScanning)
+        repo.emitRestoredPeripheralIDs([UUID()])
+        try? await Task.sleep(nanoseconds: 250_000_000)
+
+        XCTAssertEqual(repo.restoreCallCount, 1)
+        XCTAssertEqual(store.state.connection, .disconnected)
+        XCTAssertNotNil(store.state.error)
     }
 
     // MARK: - Reconnection with backoff

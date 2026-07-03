@@ -23,7 +23,7 @@ public final class BLEConnectionStateMachine: @unchecked Sendable {
     public func transition(to newState: HRSenseCore.ConnectionState) -> HRSenseCore.ConnectionState {
         lock.withLock {
             _state = newState
-            if newState == .connected {
+            if newState == .connected || newState == .restoredConnected {
                 _backoffSeconds = 1
             }
             return _state
