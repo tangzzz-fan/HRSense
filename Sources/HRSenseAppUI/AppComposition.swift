@@ -66,6 +66,7 @@ public enum AppComposition {
             makeComputeMiddleware(computeRepo: computeRepo),
             makeInferenceMiddleware(inferenceRepo: inferenceRepo),
             makeSleepMiddleware(
+                computeRepository: computeRepo,
                 sleepInferenceRepository: sleepInferenceRepo,
                 persistenceStore: persistenceStore
             ),

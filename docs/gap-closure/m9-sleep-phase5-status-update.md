@@ -1,4 +1,4 @@
-# M9 阶段 5 当前完成度与 C++ 特征缺口说明
+# M9 阶段 5 当前完成度与 C++ 特征接线说明
 
 ## 结论先说
 
@@ -6,8 +6,8 @@
 
 当前最准确的状态是：
 
-- **已完成**：睡眠分期的输入契约、仓储边界、Redux 编排最小闭环
-- **未完成**：真实 CoreML 睡眠模型、真实 C++ 睡眠特征、睡眠图表展示闭环
+- **已完成**：睡眠分期的输入契约、仓储边界、Redux 编排最小闭环、C++ 睡眠特征基础接线
+- **未完成**：真实 CoreML 睡眠模型、睡眠图表展示闭环、C++ 特征与模型口径联调
 
 也就是说，阶段 5 现在已经从“只有规划”推进到了“**可以运行的工程骨架 + 最小编排链路**”，但还没有到 plans 里“睡眠分期模型”真正完成的状态。
 
@@ -71,6 +71,26 @@
 
 这意味着阶段 5 后端链路已经具备最小落库能力。
 
+### 5. C++ 睡眠特征接口已落地
+
+当前已新增并接通：
+
+- `Sources/HRSenseComputeCxx/include/hrs_compute.h`
+- `Sources/HRSenseComputeCxx/hrv.cpp`
+- `Sources/HRSenseCompute/ComputeBridge.swift`
+- `Sources/HRSenseCore/Repositories/ComputeRepository.swift`
+- `Sources/HRSenseData/Repositories/ComputeRepositoryImpl.swift`
+
+目前已存在的 C++ 接口：
+
+- `hrs_compute_hr_trend()`
+- `hrs_compute_circadian_variation()`
+
+当前 `SleepMiddleware` 已不再使用 Swift 本地占位算法，而是改为：
+
+- 窗口内 `heartRate` 序列 -> `hrs_compute_hr_trend()`
+- 近期 `RMSSD` 历史序列 -> `hrs_compute_circadian_variation()`
+
 ## 未完成部分
 
 ### 1. 真实睡眠模型还没接入
@@ -94,39 +114,25 @@ plans 里要求的：
 
 - **真实睡眠 CoreML 推理服务**
 
-### 2. C++ 睡眠特征扩展还没落地
+### 2. 真实 C++ 特征语义仍需继续收敛
 
 plans 里明确提到两个 C++ 函数：
 
 - `hrs_compute_hr_trend()`
 - `hrs_compute_circadian_variation()`
 
-### 当前核查结果
+这两个函数现在**已经添加并接线完成**，但当前实现仍然属于第一版工程实现，而不是最终建模口径：
 
-已检查：
+- `hrs_compute_hr_trend()`
+  - 当前实现：对窗口内 `heartRate` 序列做最小二乘线性回归，返回 slope
+- `hrs_compute_circadian_variation()`
+  - 当前实现：对近期 `RMSSD` 历史序列计算归一化振幅 `(max - min) / mean`
 
-- `Sources/HRSenseComputeCxx/include/hrs_compute.h`
-- `Sources/HRSenseComputeCxx/hrv.cpp`
+这意味着：
 
-结果是：
-
-- **头文件中没有声明这两个函数**
-- **实现文件中也没有定义这两个函数**
-
-所以当前答案非常明确：
-
-- **这两个函数还没有添加**
-
-### 当前系统是怎么临时工作的
-
-为了先跑通阶段 5 编排链路，当前 `SleepMiddleware` 里使用了 **Swift 占位推导逻辑**：
-
-- `hrTrend`
-  - 用窗口内首尾心率差 / 样本数近似
-- `circadianVariation`
-  - 用窗口内最大最小心率差做归一化近似
-
-这只是为了让 `SleepWindowInput` 的结构先稳定下来，不代表已经完成了 plans 中要求的 C++ 特征扩展。
+- **接口层已经完成**
+- **工程链路已经完成**
+- **建模语义仍可能继续迭代**
 
 ## 这两个 C++ 函数应该做什么
 
@@ -136,9 +142,9 @@ plans 里明确提到两个 C++ 函数：
 
 - 计算一个睡眠窗口内心率变化趋势
 
-建议语义：
+当前实现语义：
 
-- 输入：窗口内的 HR 序列或 RR 推导出的 HR 序列
+- 输入：窗口内的 `heartRate` 序列
 - 输出：线性回归斜率
 
 解释：
@@ -147,7 +153,7 @@ plans 里明确提到两个 C++ 函数：
 - 斜率接近 0：心率较稳定
 - 斜率为正：心率抬升，可能更接近觉醒或 REM 波动
 
-建议实现形式：
+当前实现形式：
 
 - 对 `(timeIndex, heartRate)` 做最小二乘线性回归
 - 返回 slope
@@ -158,10 +164,10 @@ plans 里明确提到两个 C++ 函数：
 
 - 计算更长时间尺度上的 HRV/HR 振幅变化
 
-建议语义：
+当前实现语义：
 
-- 输入：多个相邻时间窗的 HRV 或 HR 摘要序列
-- 输出：反映昼夜节律波动幅度的一个标量
+- 输入：多个相邻时间窗的 `RMSSD` 序列
+- 输出：归一化振幅 `(max - min) / mean`
 
 解释：
 
@@ -173,13 +179,15 @@ plans 里明确提到两个 C++ 函数：
   - 后半夜 REM 增多
   - 觉醒回升
 
-注意：
+当前风险点：
 
 - 这个函数天然比 `hrs_compute_hr_trend()` 更依赖**多窗口历史上下文**
-- 因此接口设计时，不能只喂一个瞬时窗口，要明确：
+- 当前只保留了 `SleepMiddleware` 内部的近期 `RMSSD` 历史，暂时还不是跨整夜的完整 circadian 建模
+- 后续如果模型训练要求变化，最可能继续调整的是：
   - 输入窗口数量
-  - 每窗摘要字段
+  - 输入摘要字段
   - 时间跨度
+  - 归一化方式
 
 ## 当前阶段 5 是否已形成最小闭环
 
@@ -205,20 +213,16 @@ plans 里明确提到两个 C++ 函数：
 - `SleepHypnogramView`
 - 睡眠历史查询展示
 - 真实模型
-- 真实 C++ 特征
+- C++ 特征与模型口径联调
 
 ## 下一步应做什么
 
-因为这两个 C++ 函数**还没有添加**，所以“如果已经添加好则继续下一步”的条件目前并不满足。
+因为这两个 C++ 函数**已经添加并接线完成**，所以下一步应当继续推进：
 
-当前最合理的下一步应该是：
-
-1. **先补 `hrs_compute_hr_trend()`**
-2. **再补 `hrs_compute_circadian_variation()`**
-3. **在 `HRSenseComputeCxx/include/hrs_compute.h` 暴露接口**
-4. **在 `ComputeBridge.swift` / `ComputeRepositoryImpl` 暴露给 Swift**
-5. **把 `SleepMiddleware` 中当前 Swift 占位逻辑替换成真实 C++ 输出**
-6. **再继续睡眠 UI/Hypnogram**
+1. **校准 C++ 特征口径**
+2. **接真实 `SleepStageClassifier_v1.mlpackage`**
+3. **把模型输入 feature 名称与顺序固定**
+4. **继续睡眠 UI / Hypnogram**
 
 ## 对 plans 的更新理解
 
@@ -228,7 +232,7 @@ plans 里明确提到两个 C++ 函数：
 - `SleepInferenceRepositoryImpl.swift`：**已落**
 - `SleepWindowInput`：**已补，属于 plans 的必要前置契约**
 - `SleepMiddleware / SleepState / SleepAction`：**已落，可运行**
+- `hrs_compute_hr_trend()`：**已完成第一版**
+- `hrs_compute_circadian_variation()`：**已完成第一版**
 - `SleepStageClassifier_v1.mlpackage`：**未完成**
-- `hrs_compute_hr_trend()`：**未完成**
-- `hrs_compute_circadian_variation()`：**未完成**
 - `SleepHypnogramView`：**未完成**

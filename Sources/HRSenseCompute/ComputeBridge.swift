@@ -76,6 +76,33 @@ public struct ComputeBridge: Sendable {
         let features = extractFeatures(from: metrics)
         return FeatureVector(values: features)
     }
+
+    /// Compute sleep-specific C++ features from heart-rate and HRV history.
+    public func computeSleepFeatures(
+        heartRates: [Double],
+        hrvWindowValues: [Double]
+    ) throws -> SleepCXXFeatures {
+        var hrTrend = 0.0
+        let hrTrendResult = heartRates.withUnsafeBufferPointer { buf in
+            hrs_compute_hr_trend(buf.baseAddress, buf.count, &hrTrend)
+        }
+        guard hrTrendResult == 0 else {
+            throw ComputeError.computationFailed
+        }
+
+        var circadianVariation = 0.0
+        let circadianResult = hrvWindowValues.withUnsafeBufferPointer { buf in
+            hrs_compute_circadian_variation(buf.baseAddress, buf.count, &circadianVariation)
+        }
+        guard circadianResult == 0 else {
+            throw ComputeError.computationFailed
+        }
+
+        return SleepCXXFeatures(
+            hrTrend: hrTrend,
+            circadianVariation: circadianVariation
+        )
+    }
 }
 
 // MARK: - Error

@@ -6,6 +6,7 @@ import TGReduxKit
 @MainActor
 final class SleepMiddlewareTests: XCTestCase {
     private func makeStore(
+        computeRepo: FakeComputeRepository = FakeComputeRepository(),
         sleepRepo: FakeSleepInferenceRepository,
         persistenceStore: FakePersistenceStore? = nil,
         now: Date = Date(timeIntervalSince1970: 1_725_000_000)
@@ -15,6 +16,7 @@ final class SleepMiddlewareTests: XCTestCase {
             reducer: AppReducer.reduce,
             middlewares: [
                 makeSleepMiddleware(
+                    computeRepository: computeRepo,
                     sleepInferenceRepository: sleepRepo,
                     persistenceStore: persistenceStore,
                     windowDuration: 300,
@@ -25,9 +27,10 @@ final class SleepMiddlewareTests: XCTestCase {
     }
 
     func test_connectionStateChangesToggleSleepMonitoring() {
+        let computeRepo = FakeComputeRepository()
         let sleepRepo = FakeSleepInferenceRepository()
         let now = Date(timeIntervalSince1970: 1_725_000_000)
-        let store = makeStore(sleepRepo: sleepRepo, now: now)
+        let store = makeStore(computeRepo: computeRepo, sleepRepo: sleepRepo, now: now)
 
         store.dispatch(.connectionStateChanged(.connected))
         XCTAssertTrue(store.state.sleep.isMonitoring)
@@ -40,6 +43,8 @@ final class SleepMiddlewareTests: XCTestCase {
     }
 
     func test_hrvComputedBuildsWindowRunsInferenceAndPersistsSession() async throws {
+        let computeRepo = FakeComputeRepository()
+        computeRepo.nextSleepFeatures = SleepCXXFeatures(hrTrend: -0.33, circadianVariation: 0.0)
         let sleepRepo = FakeSleepInferenceRepository()
         let persistenceStore = FakePersistenceStore()
         let monitoringStart = Date(timeIntervalSince1970: 1_725_000_000)
@@ -52,6 +57,7 @@ final class SleepMiddlewareTests: XCTestCase {
         )
 
         let store = makeStore(
+            computeRepo: computeRepo,
             sleepRepo: sleepRepo,
             persistenceStore: persistenceStore,
             now: monitoringStart
@@ -90,10 +96,15 @@ final class SleepMiddlewareTests: XCTestCase {
         let session = try XCTUnwrap(store.state.sleep.currentSession)
 
         XCTAssertEqual(sleepRepo.inferenceCallCount, 1)
+        XCTAssertEqual(computeRepo.sleepFeatureCallCount, 1)
+        XCTAssertEqual(computeRepo.lastHeartRates, [61, 58])
+        XCTAssertEqual(computeRepo.lastHRVWindowValues.count, 1)
+        XCTAssertEqual(computeRepo.lastHRVWindowValues.first ?? 0, 70, accuracy: 0.0001)
         XCTAssertEqual(windowInput.timeContext.minutesSinceSessionStart, 5)
         XCTAssertEqual(windowInput.timeContext.windowStart, monitoringStart.addingTimeInterval(60))
         XCTAssertEqual(windowInput.timeContext.windowEnd, monitoringStart.addingTimeInterval(300))
-        XCTAssertEqual(windowInput.cxxFeatures.hrTrend, -3.0, accuracy: 0.0001)
+        XCTAssertEqual(windowInput.cxxFeatures.hrTrend, -0.33, accuracy: 0.0001)
+        XCTAssertEqual(windowInput.cxxFeatures.circadianVariation, 0.0, accuracy: 0.0001)
         XCTAssertEqual(store.state.sleep.lastInference?.stage, .rem)
         XCTAssertEqual(store.state.sleep.status, .ready)
         XCTAssertEqual(session.stages.count, 1)
@@ -106,10 +117,12 @@ final class SleepMiddlewareTests: XCTestCase {
     }
 
     func test_repeatedSameStageMergesIntoSingleSegment() async throws {
+        let computeRepo = FakeComputeRepository()
         let sleepRepo = FakeSleepInferenceRepository()
         let persistenceStore = FakePersistenceStore()
         let monitoringStart = Date(timeIntervalSince1970: 1_725_000_000)
         let store = makeStore(
+            computeRepo: computeRepo,
             sleepRepo: sleepRepo,
             persistenceStore: persistenceStore,
             now: monitoringStart
@@ -148,5 +161,8 @@ final class SleepMiddlewareTests: XCTestCase {
         XCTAssertEqual(session.stages.count, 1)
         XCTAssertEqual(session.stages.first?.stage, .light)
         XCTAssertEqual(session.stages.first?.endAt, monitoringStart.addingTimeInterval(600))
+        XCTAssertEqual(computeRepo.lastHRVWindowValues.count, 2)
+        XCTAssertEqual(computeRepo.lastHRVWindowValues[0], 42, accuracy: 0.0001)
+        XCTAssertEqual(computeRepo.lastHRVWindowValues[1], 45, accuracy: 0.0001)
     }
 }

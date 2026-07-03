@@ -12,12 +12,58 @@ static double mean(const uint16_t *rr, size_t n) {
     return s / n;
 }
 
+static double mean_double(const double *values, size_t n) {
+    if (!values || n == 0) return 0.0;
+    double sum = 0.0;
+    for (size_t i = 0; i < n; ++i) sum += values[i];
+    return sum / static_cast<double>(n);
+}
+
 static void diff(const uint16_t *rr, size_t n, std::vector<double> &out) {
     out.clear();
     out.reserve(n > 1 ? n - 1 : 0);
     for (size_t i = 1; i < n; ++i) {
         out.push_back((double)rr[i] - (double)rr[i-1]);
     }
+}
+
+// ============ Sleep feature helpers ============
+
+static double compute_linear_slope(const double *values, size_t n) {
+    if (!values || n < 2) return 0.0;
+
+    double sum_x = 0.0;
+    double sum_y = 0.0;
+    double sum_xy = 0.0;
+    double sum_xx = 0.0;
+
+    for (size_t i = 0; i < n; ++i) {
+        double x = static_cast<double>(i);
+        double y = values[i];
+        sum_x += x;
+        sum_y += y;
+        sum_xy += x * y;
+        sum_xx += x * x;
+    }
+
+    double denom = static_cast<double>(n) * sum_xx - sum_x * sum_x;
+    if (std::abs(denom) < 1e-12) return 0.0;
+    return (static_cast<double>(n) * sum_xy - sum_x * sum_y) / denom;
+}
+
+static double compute_normalized_range(const double *values, size_t n) {
+    if (!values || n < 2) return 0.0;
+
+    double min_value = values[0];
+    double max_value = values[0];
+    for (size_t i = 1; i < n; ++i) {
+        min_value = std::min(min_value, values[i]);
+        max_value = std::max(max_value, values[i]);
+    }
+
+    double baseline = std::abs(mean_double(values, n));
+    if (baseline < 1e-6) return 0.0;
+    return (max_value - min_value) / baseline;
 }
 
 // ============ Time-domain HRV ============
@@ -299,5 +345,17 @@ int hrs_extract_features(const hrs_hrv_metrics_t *metrics, float *out_features) 
     out_features[11] = (float)metrics->sample_entropy;
     out_features[12] = (float)metrics->dfa_alpha1;
     out_features[13] = (float)metrics->stress_index;
+    return 0;
+}
+
+int hrs_compute_hr_trend(const double *hr_values, size_t count, double *out_trend) {
+    if (!out_trend) return -1;
+    *out_trend = compute_linear_slope(hr_values, count);
+    return 0;
+}
+
+int hrs_compute_circadian_variation(const double *hrv_values, size_t count, double *out_variation) {
+    if (!out_variation) return -1;
+    *out_variation = compute_normalized_range(hrv_values, count);
     return 0;
 }

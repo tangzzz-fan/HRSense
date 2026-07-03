@@ -49,6 +49,22 @@ int hrs_compute_hrv(const uint16_t *rr_ms, size_t count, hrs_hrv_metrics_t *out_
 /// @return 0 on success.
 int hrs_extract_features(const hrs_hrv_metrics_t *metrics, float *out_features);
 
+/// Compute the linear heart-rate trend slope for one sleep window.
+///
+/// @param hr_values   Pointer to array of heart-rate samples.
+/// @param count       Number of heart-rate samples.
+/// @param out_trend   Pointer to caller-allocated double slope output.
+/// @return 0 on success, non-zero on invalid pointers.
+int hrs_compute_hr_trend(const double *hr_values, size_t count, double *out_trend);
+
+/// Compute a long-range circadian variation proxy from historical HRV values.
+///
+/// @param hrv_values      Pointer to array of HRV summary values (e.g. RMSSD).
+/// @param count           Number of values.
+/// @param out_variation   Pointer to caller-allocated variation output.
+/// @return 0 on success, non-zero on invalid pointers.
+int hrs_compute_circadian_variation(const double *hrv_values, size_t count, double *out_variation);
+
 #ifdef __cplusplus
 }
 #endif

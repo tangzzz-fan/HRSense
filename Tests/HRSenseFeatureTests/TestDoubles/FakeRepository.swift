@@ -98,12 +98,27 @@ final class FakeDeviceRepository: DeviceRepository, @unchecked Sendable {
 
 final class FakeComputeRepository: ComputeRepository, @unchecked Sendable {
     var computeCallCount = 0
+    var sleepFeatureCallCount = 0
     var shouldThrow = false
+    var nextSleepFeatures = SleepCXXFeatures(hrTrend: -0.25, circadianVariation: 0.42)
+    var lastHeartRates: [Int] = []
+    var lastHRVWindowValues: [Double] = []
 
     func computeHRV(from rrIntervalsMs: [Int]) throws -> HRVMetrics {
         computeCallCount += 1
         if shouldThrow { throw AppError.computeFailed }
         return HRVMetrics(sdnn: 50, rmssd: 30)
+    }
+
+    func computeSleepFeatures(
+        heartRates: [Int],
+        hrvWindowValues: [Double]
+    ) throws -> SleepCXXFeatures {
+        sleepFeatureCallCount += 1
+        lastHeartRates = heartRates
+        lastHRVWindowValues = hrvWindowValues
+        if shouldThrow { throw AppError.computeFailed }
+        return nextSleepFeatures
     }
 }
 

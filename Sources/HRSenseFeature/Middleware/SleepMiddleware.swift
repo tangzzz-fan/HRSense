@@ -11,13 +11,17 @@ import TGReduxKit
 /// - merge stage segments into `SleepSession`
 /// - persist the evolving sleep session
 public func makeSleepMiddleware(
+    computeRepository: any ComputeRepository,
     sleepInferenceRepository: any SleepInferenceRepository,
     persistenceStore: (any PersistenceStore)? = nil,
     windowDuration: TimeInterval = 300,
+    circadianHistoryDuration: TimeInterval = 4 * 60 * 60,
     calendar: Calendar = Calendar(identifier: .gregorian),
     nowProvider: @escaping @Sendable () -> Date = Date.init
 ) -> Middleware<AppState, Action> {
-    { store, action, next in
+    var metricsHistory: [SleepMetricSnapshot] = []
+
+    return { store, action, next in
         next(action)
 
         switch action {
@@ -28,13 +32,27 @@ public func makeSleepMiddleware(
             store.dispatch(.sleep(.monitoringStopped(nowProvider())))
 
         case .clearSamples:
+            metricsHistory.removeAll()
             store.dispatch(.sleep(.reset))
 
         case .hrvComputed(let metrics):
             guard store.state.sleep.isMonitoring else { break }
+            guard let latestSample = store.state.live.recentSamples.last else { break }
+
+            metricsHistory.append(
+                SleepMetricSnapshot(
+                    timestamp: latestSample.timestamp,
+                    rmssd: metrics.rmssd
+                )
+            )
+            let historyCutoff = latestSample.timestamp.addingTimeInterval(-circadianHistoryDuration)
+            metricsHistory.removeAll { $0.timestamp < historyCutoff }
+
             guard let input = makeSleepWindowInput(
                 state: store.state,
                 metrics: metrics,
+                computeRepository: computeRepository,
+                metricsHistory: metricsHistory,
                 windowDuration: windowDuration,
                 calendar: calendar
             ) else {
@@ -90,6 +108,8 @@ public func makeSleepMiddleware(
 private func makeSleepWindowInput(
     state: AppState,
     metrics: HRVMetrics,
+    computeRepository: any ComputeRepository,
+    metricsHistory: [SleepMetricSnapshot],
     windowDuration: TimeInterval,
     calendar: Calendar
 ) -> SleepWindowInput? {
@@ -107,33 +127,24 @@ private func makeSleepWindowInput(
         calendar: calendar
     )
 
+    let heartRates = windowSamples.map(\.heartRate)
+    let hrvWindowValues = metricsHistory.map(\.rmssd)
+
+    let cxxFeatures = (try? computeRepository.computeSleepFeatures(
+        heartRates: heartRates,
+        hrvWindowValues: hrvWindowValues
+    )) ?? SleepCXXFeatures()
+
     return SleepWindowInput(
         metrics: metrics,
         timeContext: timeContext,
-        cxxFeatures: makeSleepCXXFeaturePlaceholders(from: windowSamples)
+        cxxFeatures: cxxFeatures
     )
 }
 
-private func makeSleepCXXFeaturePlaceholders(
-    from samples: [HeartRateSample]
-) -> SleepCXXFeatures {
-    guard
-        let first = samples.first?.heartRate,
-        let last = samples.last?.heartRate,
-        !samples.isEmpty
-    else {
-        return SleepCXXFeatures()
-    }
-
-    let hrTrend = Double(last - first) / Double(max(samples.count - 1, 1))
-    let minHR = samples.map(\.heartRate).min() ?? first
-    let maxHR = samples.map(\.heartRate).max() ?? first
-    let circadianVariation = Double(maxHR - minHR) / 100.0
-
-    return SleepCXXFeatures(
-        hrTrend: hrTrend,
-        circadianVariation: circadianVariation
-    )
+private struct SleepMetricSnapshot {
+    let timestamp: Date
+    let rmssd: Double
 }
 
 private func mergeSleepPrediction(

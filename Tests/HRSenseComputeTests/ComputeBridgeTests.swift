@@ -83,6 +83,28 @@ final class ComputeBridgeTests: XCTestCase {
         XCTAssertEqual(fv.contractVersion, FeatureVector.currentContractVersion)
     }
 
+    func test_computeSleepFeaturesReturnsTrendAndCircadianVariation() throws {
+        let bridge = ComputeBridge()
+        let features = try bridge.computeSleepFeatures(
+            heartRates: [60, 62, 64, 66],
+            hrvWindowValues: [20, 30, 25, 35]
+        )
+
+        XCTAssertEqual(features.hrTrend, 2.0, accuracy: 0.0001)
+        XCTAssertEqual(features.circadianVariation, 15.0 / 27.5, accuracy: 0.0001)
+    }
+
+    func test_computeSleepFeaturesReturnsZeroForShortHistory() throws {
+        let bridge = ComputeBridge()
+        let features = try bridge.computeSleepFeatures(
+            heartRates: [61],
+            hrvWindowValues: [42]
+        )
+
+        XCTAssertEqual(features.hrTrend, 0.0, accuracy: 0.0001)
+        XCTAssertEqual(features.circadianVariation, 0.0, accuracy: 0.0001)
+    }
+
     // MARK: - HRVMetrics ↔ FeatureVector
 
     func test_metricsToFeatureVector() throws {
