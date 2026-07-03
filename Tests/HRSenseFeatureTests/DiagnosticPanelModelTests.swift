@@ -29,6 +29,17 @@ final class DiagnosticPanelModelTests: XCTestCase {
                         bytesReceived: 2048
                     )
                 },
+                latestFeatureVectorProvider: {
+                    FeatureVectorSnapshotJSON(contractVersion: 1, values: Array(repeating: 1.5, count: 14))
+                },
+                latestInferenceProvider: {
+                    InferenceSnapshotJSON(
+                        label: "Stress",
+                        probabilities: ["Stress": 0.8, "Baseline": 0.2],
+                        inferenceTimeMs: 3.2,
+                        modelVersion: "1.0.0-placeholder"
+                    )
+                },
                 systemInfoProvider: { SystemInfo.current }
             )
         )
@@ -38,6 +49,8 @@ final class DiagnosticPanelModelTests: XCTestCase {
         XCTAssertEqual(model.kpi.reconnectCount, 2)
         XCTAssertEqual(model.kpi.connectionSuccessRate, 0.75)
         XCTAssertEqual(model.crashHistory, ["CRASH: reason=test"])
+        XCTAssertEqual(model.latestFeatureVector?.contractVersion, 1)
+        XCTAssertEqual(model.latestInference?.modelVersion, "1.0.0-placeholder")
     }
 
     func test_exportDiagnosticPackageWritesReadableJSON() throws {
@@ -66,6 +79,17 @@ final class DiagnosticPanelModelTests: XCTestCase {
                         bytesReceived: 4096
                     )
                 },
+                latestFeatureVectorProvider: {
+                    FeatureVectorSnapshotJSON(contractVersion: 1, values: Array(repeating: 2.0, count: 14))
+                },
+                latestInferenceProvider: {
+                    InferenceSnapshotJSON(
+                        label: "Baseline",
+                        probabilities: ["Baseline": 0.9, "Stress": 0.1],
+                        inferenceTimeMs: 2.1,
+                        modelVersion: "2.0.0"
+                    )
+                },
                 systemInfoProvider: { SystemInfo.current }
             )
         )
@@ -83,6 +107,8 @@ final class DiagnosticPanelModelTests: XCTestCase {
         XCTAssertEqual(decoded.logEntries.count, 1)
         XCTAssertEqual(decoded.stateTransitions, ["otaStateChanged(completed)"])
         XCTAssertEqual(decoded.metricsSnapshot.bytesReceived, 4096)
+        XCTAssertEqual(decoded.latestFeatureVector?.values.count, 14)
+        XCTAssertEqual(decoded.latestInference?.modelVersion, "2.0.0")
 
         try? FileManager.default.removeItem(at: exportURL)
     }

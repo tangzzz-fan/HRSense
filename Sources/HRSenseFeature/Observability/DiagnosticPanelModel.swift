@@ -3,27 +3,33 @@ import SwiftUI
 import HRSenseCore
 import HRSenseProtocol
 
-public struct DiagnosticPanelDependencies: Sendable {
-    public let kpiSnapshotProvider: @Sendable () -> KPISnapshot
-    public let logEntriesProvider: @Sendable () -> [LogEntry]
-    public let stateTransitionsProvider: @Sendable () -> [String]
-    public let metricDiagnosticsProvider: @Sendable () -> [String]
-    public let metricsSnapshotProvider: @Sendable () -> MetricsSnapshotJSON
-    public let systemInfoProvider: @Sendable () -> SystemInfo
+public struct DiagnosticPanelDependencies {
+    public let kpiSnapshotProvider: () -> KPISnapshot
+    public let logEntriesProvider: () -> [LogEntry]
+    public let stateTransitionsProvider: () -> [String]
+    public let metricDiagnosticsProvider: () -> [String]
+    public let metricsSnapshotProvider: () -> MetricsSnapshotJSON
+    public let latestFeatureVectorProvider: () -> FeatureVectorSnapshotJSON?
+    public let latestInferenceProvider: () -> InferenceSnapshotJSON?
+    public let systemInfoProvider: () -> SystemInfo
 
     public init(
-        kpiSnapshotProvider: @escaping @Sendable () -> KPISnapshot,
-        logEntriesProvider: @escaping @Sendable () -> [LogEntry],
-        stateTransitionsProvider: @escaping @Sendable () -> [String],
-        metricDiagnosticsProvider: @escaping @Sendable () -> [String],
-        metricsSnapshotProvider: @escaping @Sendable () -> MetricsSnapshotJSON,
-        systemInfoProvider: @escaping @Sendable () -> SystemInfo
+        kpiSnapshotProvider: @escaping () -> KPISnapshot,
+        logEntriesProvider: @escaping () -> [LogEntry],
+        stateTransitionsProvider: @escaping () -> [String],
+        metricDiagnosticsProvider: @escaping () -> [String],
+        metricsSnapshotProvider: @escaping () -> MetricsSnapshotJSON,
+        latestFeatureVectorProvider: @escaping () -> FeatureVectorSnapshotJSON?,
+        latestInferenceProvider: @escaping () -> InferenceSnapshotJSON?,
+        systemInfoProvider: @escaping () -> SystemInfo
     ) {
         self.kpiSnapshotProvider = kpiSnapshotProvider
         self.logEntriesProvider = logEntriesProvider
         self.stateTransitionsProvider = stateTransitionsProvider
         self.metricDiagnosticsProvider = metricDiagnosticsProvider
         self.metricsSnapshotProvider = metricsSnapshotProvider
+        self.latestFeatureVectorProvider = latestFeatureVectorProvider
+        self.latestInferenceProvider = latestInferenceProvider
         self.systemInfoProvider = systemInfoProvider
     }
 }
@@ -39,6 +45,8 @@ public final class DiagnosticPanelModel: ObservableObject {
         otaSuccessRate: 0
     )
     @Published public private(set) var crashHistory: [String] = []
+    @Published public private(set) var latestFeatureVector: FeatureVectorSnapshotJSON?
+    @Published public private(set) var latestInference: InferenceSnapshotJSON?
     @Published public private(set) var exportURL: URL?
     @Published public private(set) var exportStatusMessage: String?
 
@@ -51,6 +59,8 @@ public final class DiagnosticPanelModel: ObservableObject {
     public func refresh() {
         kpi = dependencies.kpiSnapshotProvider()
         crashHistory = dependencies.metricDiagnosticsProvider()
+        latestFeatureVector = dependencies.latestFeatureVectorProvider()
+        latestInference = dependencies.latestInferenceProvider()
     }
 
     public func exportDiagnosticPackage() {
@@ -59,6 +69,8 @@ public final class DiagnosticPanelModel: ObservableObject {
                 logEntries: dependencies.logEntriesProvider(),
                 stateTransitions: dependencies.stateTransitionsProvider(),
                 metricsSnapshot: dependencies.metricsSnapshotProvider(),
+                latestFeatureVector: dependencies.latestFeatureVectorProvider(),
+                latestInference: dependencies.latestInferenceProvider(),
                 systemInfo: dependencies.systemInfoProvider()
             )
             let data = try package.exportJSON()

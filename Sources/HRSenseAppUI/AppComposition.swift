@@ -80,6 +80,22 @@ public enum AppComposition {
                         bytesReceived: snapshot.bytesReceived
                     )
                 },
+                latestFeatureVectorProvider: {
+                    guard let latestFeatures = store.state.inference.latestFeatures else { return nil }
+                    return FeatureVectorSnapshotJSON(
+                        contractVersion: latestFeatures.contractVersion,
+                        values: latestFeatures.values
+                    )
+                },
+                latestInferenceProvider: {
+                    guard let latestResult = store.state.inference.latestResult else { return nil }
+                    return InferenceSnapshotJSON(
+                        label: latestResult.label,
+                        probabilities: latestResult.probabilities,
+                        inferenceTimeMs: latestResult.inferenceTimeMs,
+                        modelVersion: latestResult.modelVersion
+                    )
+                },
                 systemInfoProvider: { SystemInfo.current }
             )
         )

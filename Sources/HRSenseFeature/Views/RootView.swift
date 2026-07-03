@@ -140,6 +140,9 @@ public struct RootView: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
+                Text(result.modelVersion)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
                 Spacer()
                 if result.inferenceTimeMs > 0 {
                     Text(String(format: "%.1f ms", result.inferenceTimeMs))

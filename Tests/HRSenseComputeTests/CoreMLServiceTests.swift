@@ -65,6 +65,26 @@ final class CoreMLServiceTests: XCTestCase {
         XCTAssertEqual(Set(prediction.probabilities.keys), Set<String>(["Baseline", "Stress"]))
     }
 
+    func test_fallbackPredictionGoldenSamplesRemainStable() {
+        let missingURL = URL(fileURLWithPath: "/tmp/HRSense/MissingModel.mlpackage")
+        let service = CoreMLService(modelURL: missingURL)
+
+        let stress = service.predict(
+            features: [12, 18, 4, 760, 98, 220, 180, 2.6, 400, 15, 28, 1.1, 1.3, 620]
+        )
+        let baseline = service.predict(
+            features: [48, 42, 18, 840, 72, 650, 580, 1.2, 1400, 28, 54, 1.4, 0.88, 220]
+        )
+
+        XCTAssertEqual(stress?.label, "Stress")
+        XCTAssertEqual(stress?.probabilities["Stress"] ?? 0, 0.7, accuracy: 0.0001)
+        XCTAssertEqual(stress?.probabilities["Baseline"] ?? 0, 0.3, accuracy: 0.0001)
+
+        XCTAssertEqual(baseline?.label, "Baseline")
+        XCTAssertEqual(baseline?.probabilities["Baseline"] ?? 0, 0.7, accuracy: 0.0001)
+        XCTAssertEqual(baseline?.probabilities["Stress"] ?? 0, 0.3, accuracy: 0.0001)
+    }
+
     func test_predictRejectsUnexpectedFeatureCount() {
         let service = CoreMLService(modelURL: placeholderModelURL())
 

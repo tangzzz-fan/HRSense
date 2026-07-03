@@ -23,6 +23,10 @@ public struct DiagnosticPackage: Codable, Equatable, Sendable {
     public let stateTransitions: [String]
     /// Metrics snapshot at export time.
     public let metricsSnapshot: MetricsSnapshotJSON
+    /// Latest extracted features for M8 diagnosis.
+    public let latestFeatureVector: FeatureVectorSnapshotJSON?
+    /// Latest inference output for M8 diagnosis.
+    public let latestInference: InferenceSnapshotJSON?
     /// App version, build, OS version.
     public let systemInfo: SystemInfo
 
@@ -30,11 +34,15 @@ public struct DiagnosticPackage: Codable, Equatable, Sendable {
         logEntries: [LogEntry],
         stateTransitions: [String],
         metricsSnapshot: MetricsSnapshotJSON,
+        latestFeatureVector: FeatureVectorSnapshotJSON? = nil,
+        latestInference: InferenceSnapshotJSON? = nil,
         systemInfo: SystemInfo
     ) {
         self.logEntries = logEntries
         self.stateTransitions = stateTransitions
         self.metricsSnapshot = metricsSnapshot
+        self.latestFeatureVector = latestFeatureVector
+        self.latestInference = latestInference
         self.systemInfo = systemInfo
     }
 
@@ -44,6 +52,30 @@ public struct DiagnosticPackage: Codable, Equatable, Sendable {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
         return try encoder.encode(self)
+    }
+}
+
+public struct FeatureVectorSnapshotJSON: Codable, Equatable, Sendable {
+    public let contractVersion: Int
+    public let values: [Float]
+
+    public init(contractVersion: Int, values: [Float]) {
+        self.contractVersion = contractVersion
+        self.values = values
+    }
+}
+
+public struct InferenceSnapshotJSON: Codable, Equatable, Sendable {
+    public let label: String
+    public let probabilities: [String: Float]
+    public let inferenceTimeMs: Double
+    public let modelVersion: String
+
+    public init(label: String, probabilities: [String: Float], inferenceTimeMs: Double, modelVersion: String) {
+        self.label = label
+        self.probabilities = probabilities
+        self.inferenceTimeMs = inferenceTimeMs
+        self.modelVersion = modelVersion
     }
 }
 

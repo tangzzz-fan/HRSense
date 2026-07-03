@@ -31,6 +31,27 @@ public struct DiagnosticPanelView: View {
                     kpiRow("OTA Success Rate", String(format: "%.0f%%", model.kpi.otaSuccessRate * 100))
                 }
 
+                Section("M8 Inference") {
+                    if let latestFeatureVector = model.latestFeatureVector {
+                        kpiRow("Feature Count", "\(latestFeatureVector.values.count)")
+                        kpiRow("Contract", "v\(latestFeatureVector.contractVersion)")
+                        Text(featurePreview(latestFeatureVector.values))
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .textSelection(.enabled)
+                    } else {
+                        Text("No extracted features yet").foregroundColor(.secondary)
+                    }
+
+                    if let latestInference = model.latestInference {
+                        kpiRow("Label", latestInference.label)
+                        kpiRow("Model Version", latestInference.modelVersion)
+                        kpiRow("Inference Time", String(format: "%.1f ms", latestInference.inferenceTimeMs))
+                    } else {
+                        Text("No inference result yet").foregroundColor(.secondary)
+                    }
+                }
+
                 // Section 2: Log toggles
                 Section("Log Categories") {
                     ForEach(Array(logCategories.keys.sorted(by: { $0.rawValue < $1.rawValue })), id: \.rawValue) { cat in
@@ -136,6 +157,16 @@ public struct DiagnosticPanelView: View {
 
     private func refreshMetrics() {
         model.refresh()
+    }
+
+    private func featurePreview(_ values: [Float]) -> String {
+        values
+            .prefix(6)
+            .enumerated()
+            .map { index, value in
+                "\(index):\(String(format: "%.2f", value))"
+            }
+            .joined(separator: "  ")
     }
 }
 
