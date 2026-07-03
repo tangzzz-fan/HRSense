@@ -7,6 +7,12 @@ import HRSenseCore
 ///
 /// Wraps CBCentralManager and bridges delegate callbacks into AsyncStreams
 /// for consumption by upper layers.
+///
+/// GATT Characteristic mapping (doc 03 §3.1):
+///   0002 Data/Notify  — device→App data (HR, waveform, events)
+///   0003 Control/Write — App→device commands (HELLO, START_STREAM, OTA control)
+///   0004 Info           — device→App readable metadata
+///   0005 OTA Data       — App→device firmware image chunks (Write Without Response)
 public final class BLECentralDataSource: NSObject, @unchecked Sendable {
 
     // All CBUUID/CoreBluetooth state is isolated to bleQueue.
@@ -16,6 +22,7 @@ public final class BLECentralDataSource: NSObject, @unchecked Sendable {
     private let notifyCharUUID = CBUUID(string: "48525330-0002-4B8E-9F2A-1D3C5E7B9A10")
     private let writeCharUUID = CBUUID(string: "48525330-0003-4B8E-9F2A-1D3C5E7B9A10")
     private let infoCharUUID = CBUUID(string: "48525330-0004-4B8E-9F2A-1D3C5E7B9A10")
+    private let otaDataCharUUID = CBUUID(string: "48525330-0005-4B8E-9F2A-1D3C5E7B9A10")
 
     private var _centralManager: CBCentralManager?
     private var _state: ConnectionState = .idle
@@ -23,6 +30,7 @@ public final class BLECentralDataSource: NSObject, @unchecked Sendable {
     private var _connectedPeripheral: CBPeripheral?
     private var _notifyCharacteristic: CBCharacteristic?
     private var _writeCharacteristic: CBCharacteristic?
+    private var _otaDataCharacteristic: CBCharacteristic?
 
     private var connectionStateContinuation: AsyncStream<ConnectionState>.Continuation?
     private var discoveredDevicesContinuation: AsyncStream<DeviceInfo>.Continuation?
@@ -48,6 +56,8 @@ public final class BLECentralDataSource: NSObject, @unchecked Sendable {
         _centralManager = CBCentralManager(delegate: self, queue: bleQueue)
     }
 
+    // MARK: - Public API
+
     public func startScanning() {
         bleQueue.async { [weak self] in
             guard let self, let cm = self._centralManager, cm.state == .poweredOn else { return }
@@ -58,10 +68,7 @@ public final class BLECentralDataSource: NSObject, @unchecked Sendable {
     }
 
     public func stopScanning() {
-        bleQueue.async { [weak self] in
-            self?._centralManager?.stopScan()
-            self?.emitState(.idle)
-        }
+        bleQueue.async { [weak self] in self?._centralManager?.stopScan(); self?.emitState(.idle) }
     }
 
     public func connect(to peripheralID: UUID) {
@@ -83,6 +90,10 @@ public final class BLECentralDataSource: NSObject, @unchecked Sendable {
         }
     }
 
+    // MARK: - Command write (0003 Control, Write With Response)
+
+    /// Send a control command via Control/Write (0003). Uses Write With Response
+    /// for ATT-level acknowledgement.
     public func sendCommand(_ opcode: UInt8, payload: Data) async throws -> Data {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Data, Error>) in
             bleQueue.async { [weak self] in
@@ -91,11 +102,38 @@ public final class BLECentralDataSource: NSObject, @unchecked Sendable {
                       let writeChar = self._writeCharacteristic else {
                     continuation.resume(throwing: AppError.deviceNotFound); return
                 }
+                HRSenseLogging.debug(.protoCmd, "WRITE(0003) opcode=0x\(String(opcode, radix: 16)) len=\(payload.count)")
                 peripheral.writeValue(payload, for: writeChar, type: .withResponse)
                 continuation.resume(returning: payload)
             }
         }
     }
+
+    // MARK: - OTA window write (0005 OTA Data, Write Without Response)
+
+    /// Write a firmware image chunk via OTA Data (0005).
+    ///
+    /// Uses Write Without Response — flow control is managed by the caller
+    /// via `OTA_WINDOW_ACK` responses from the device.
+    ///
+    /// - Parameter chunk: raw firmware bytes. Max length determined by MTU.
+    /// - Returns: true if the write was queued successfully.
+    public func sendOTAChunk(_ chunk: Data) {
+        bleQueue.async { [weak self] in
+            guard let self,
+                  let peripheral = self._connectedPeripheral,
+                  let otaChar = self._otaDataCharacteristic else { return }
+            HRSenseLogging.debug(.ota, "OTA_WRITE(0005) len=\(chunk.count)")
+            peripheral.writeValue(chunk, for: otaChar, type: .withoutResponse)
+        }
+    }
+
+    /// Whether the OTA Data (0005) characteristic has been discovered.
+    public var otaChannelReady: Bool {
+        bleQueue.sync { _otaDataCharacteristic != nil }
+    }
+
+    // MARK: - Private
 
     private func emitState(_ state: ConnectionState) {
         _state = state
@@ -105,6 +143,7 @@ public final class BLECentralDataSource: NSObject, @unchecked Sendable {
 
     private func handleNotifyData(_ data: Data) {
         metricsCollector.recordBytesReceived(data.count)
+        HRSenseLogging.debug(.bleRaw, HexFormat.canonicalHexDump(data))
         let assembler = FrameAssembler()
         for frame in assembler.feed(data) {
             switch frame {
@@ -112,7 +151,7 @@ public final class BLECentralDataSource: NSObject, @unchecked Sendable {
                 metricsCollector.recordSampleReceived()
                 heartRateContinuation?.yield(dataParser.parseSample(sample))
             case .command, .ack, .event, .waveform:
-                break // Routed by DeviceRepositoryImpl
+                break
             }
         }
     }
@@ -141,7 +180,7 @@ extension BLECentralDataSource: CBCentralManagerDelegate {
         emitState(.disconnected)
     }
     public func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
-        _connectedPeripheral = nil; _notifyCharacteristic = nil; _writeCharacteristic = nil
+        _connectedPeripheral = nil; _notifyCharacteristic = nil; _writeCharacteristic = nil; _otaDataCharacteristic = nil
         emitState(.disconnected)
     }
 }
@@ -152,7 +191,8 @@ extension BLECentralDataSource: CBPeripheralDelegate {
     public func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
         guard error == nil, let svcs = peripheral.services else { return }
         for svc in svcs where svc.uuid == serviceUUID {
-            peripheral.discoverCharacteristics([notifyCharUUID, writeCharUUID, infoCharUUID], for: svc)
+            // Discover all 4 characteristics (0002 notify, 0003 write, 0004 info, 0005 ota)
+            peripheral.discoverCharacteristics([notifyCharUUID, writeCharUUID, infoCharUUID, otaDataCharUUID], for: svc)
         }
     }
     public func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
@@ -162,6 +202,7 @@ extension BLECentralDataSource: CBPeripheralDelegate {
             case notifyCharUUID: _notifyCharacteristic = c; peripheral.setNotifyValue(true, for: c)
             case writeCharUUID: _writeCharacteristic = c
             case infoCharUUID: peripheral.readValue(for: c)
+            case otaDataCharUUID: _otaDataCharacteristic = c
             default: break
             }
         }
