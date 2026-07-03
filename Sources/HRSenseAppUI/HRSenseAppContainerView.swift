@@ -17,6 +17,9 @@ public struct HRSenseAppContainerView: View {
         let inferenceRepo = InferenceRepositoryImpl()
         let waveformBuffer = WaveformRingBuffer()
 
+        // Kick-start the MetricKit manager (crash/hang diagnostics)
+        _ = MetricKitManager.shared
+
         // OTA repository — needs sendCommand/sendOTAChunk closures from BLE data source
         let otaRepo = OTARepositoryImpl(
             sendCommand: { [bleDataSource] opcode, payload in
