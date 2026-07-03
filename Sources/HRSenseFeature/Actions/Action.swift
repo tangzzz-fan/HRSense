@@ -31,6 +31,11 @@ public enum Action: Equatable, Sendable {
     // MARK: OTA (M6 full impl)
     case otaStateChanged(OTAState)
 
+    // MARK: Waveform (M5)
+    case waveformSamplesReceived([WaveformSample])  // M5: new waveform samples pushed to ring buffer
+    case waveformMetricsUpdated(WaveformMetrics)    // M5: throughput metrics snapshot
+    case waveformTypeSelected(WaveformType)         // M5: user switches ECG/PPG
+
     // MARK: Error
     case errorOccurred(AppError)
     case dismissError
@@ -56,6 +61,9 @@ extension Action: CustomStringConvertible {
         case .hrvComputed: return "hrvComputed"
         case .inferenceCompleted: return "inferenceCompleted"
         case .otaStateChanged(let o): return "otaStateChanged(\(o.phase))"
+        case .waveformSamplesReceived(let s): return "waveformSamplesReceived(\(s.count) samples)"
+        case .waveformMetricsUpdated: return "waveformMetricsUpdated"
+        case .waveformTypeSelected(let t): return "waveformTypeSelected(\(t))"
         case .errorOccurred(let e): return "errorOccurred(\(e))"
         case .dismissError: return "dismissError"
         case .clearSamples: return "clearSamples"

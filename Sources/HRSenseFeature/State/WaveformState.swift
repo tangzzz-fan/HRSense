@@ -13,4 +13,18 @@ public struct WaveformState: Equatable, Sendable {
     public var metrics: WaveformMetrics = WaveformMetrics()
     /// Whether waveform streaming is active.
     public var isStreaming: Bool = false
+
+    public init(
+        ecgSamples: [WaveformSample] = [],
+        ppgSamples: [WaveformSample] = [],
+        selectedType: WaveformType = .ecg,
+        metrics: WaveformMetrics = WaveformMetrics(),
+        isStreaming: Bool = false
+    ) {
+        self.ecgSamples = ecgSamples
+        self.ppgSamples = ppgSamples
+        self.selectedType = selectedType
+        self.metrics = metrics
+        self.isStreaming = isStreaming
+    }
 }

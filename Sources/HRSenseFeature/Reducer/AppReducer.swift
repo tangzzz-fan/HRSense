@@ -68,6 +68,21 @@ public enum AppReducer {
         case .otaStateChanged(let ota):
             state.ota = ota
 
+        case .waveformSamplesReceived(let samples):
+            state.waveform.ecgSamples.append(contentsOf: samples)
+            // Keep bounded to last 7680 samples (~60s @ 128 Hz)
+            let maxSamples = 7680
+            if state.waveform.ecgSamples.count > maxSamples {
+                state.waveform.ecgSamples = Array(state.waveform.ecgSamples.suffix(maxSamples))
+            }
+            state.waveform.isStreaming = true
+
+        case .waveformMetricsUpdated(let metrics):
+            state.waveform.metrics = metrics
+
+        case .waveformTypeSelected(let type):
+            state.waveform.selectedType = type
+
         case .errorOccurred(let error):
             state.error = error
             // Connection-class errors force disconnection

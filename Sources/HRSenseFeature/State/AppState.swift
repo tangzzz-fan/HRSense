@@ -15,6 +15,8 @@ public struct AppState: Equatable, Sendable {
     public var inference: InferenceState
     /// OTA firmware update state.
     public var ota: OTAState
+    /// Waveform sub-state (ECG/PPG, M5).
+    public var waveform: WaveformState
     /// Current error (shown in UI banner).
     public var error: AppError?
 
@@ -25,6 +27,7 @@ public struct AppState: Equatable, Sendable {
         metrics: MetricsState = MetricsState(),
         inference: InferenceState = InferenceState(),
         ota: OTAState = OTAState(),
+        waveform: WaveformState = WaveformState(),
         error: AppError? = nil
     ) {
         self.connection = connection
@@ -33,6 +36,7 @@ public struct AppState: Equatable, Sendable {
         self.metrics = metrics
         self.inference = inference
         self.ota = ota
+        self.waveform = waveform
         self.error = error
     }
 }

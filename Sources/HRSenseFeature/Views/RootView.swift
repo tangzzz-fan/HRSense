@@ -9,14 +9,17 @@ public struct RootView: View {
     public init() {}
 
     public var body: some View {
-        VStack(spacing: 16) {
-            connectionStatusView
-            deviceInfoView
-            heartRateView
-            errorBannerView
-            Spacer()
+        ScrollView {
+            VStack(spacing: 16) {
+                connectionStatusView
+                deviceInfoView
+                heartRateView
+                waveformView
+                errorBannerView
+                Spacer()
+            }
+            .padding()
         }
-        .padding()
         .onAppear {
             store.dispatch(.startScanning)
         }
@@ -80,6 +83,22 @@ public struct RootView: View {
             }
         }
         .padding(.vertical, 32)
+    }
+
+    // MARK: - Waveform
+
+    @ViewBuilder
+    private var waveformView: some View {
+        if store.state.waveform.isStreaming {
+            WaveformDisplayView(
+                samples: store.state.waveform.ecgSamples,
+                metrics: store.state.waveform.metrics,
+                selectedType: Binding(
+                    get: { store.state.waveform.selectedType },
+                    set: { store.dispatch(.waveformTypeSelected($0)) }
+                )
+            )
+        }
     }
 
     // MARK: - Error banner
