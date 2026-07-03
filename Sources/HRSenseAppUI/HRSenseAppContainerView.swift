@@ -11,11 +11,11 @@ public struct HRSenseAppContainerView: View {
         // Activate OSLog-backed logging
         HRSenseLogging.activateOSLog()
 
-        let bleDataSource = BLECentralDataSource()
+        let waveformBuffer = WaveformRingBuffer()
+        let bleDataSource = BLECentralDataSource(waveformRingBuffer: waveformBuffer)
         let deviceRepo = DeviceRepositoryImpl(bleDataSource: bleDataSource)
         let computeRepo = ComputeRepositoryImpl()
         let inferenceRepo = InferenceRepositoryImpl()
-        let waveformBuffer = WaveformRingBuffer()
 
         // Kick-start the MetricKit manager (crash/hang diagnostics)
         _ = MetricKitManager.shared

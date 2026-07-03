@@ -40,6 +40,7 @@ public final class BLECentralDataSource: NSObject, @unchecked Sendable {
     public let connectionStateStream: AsyncStream<ConnectionState>
     public let discoveredDevicesStream: AsyncStream<DeviceInfo>
     public let heartRateStream: AsyncStream<HeartRateSample>
+    public let waveformRingBuffer: (any WaveformRingBufferProtocol)?
 
     public let dataParser = BLEDataParser()
     public let metricsCollector = MetricsCollector()
@@ -49,7 +50,11 @@ public final class BLECentralDataSource: NSObject, @unchecked Sendable {
     /// Persistent FrameAssembler — one per connection to correctly reassemble multi-fragment frames.
     private var frameAssembler = FrameAssembler()
 
-    public override init() {
+    public init(
+        waveformRingBuffer: (any WaveformRingBufferProtocol)? = nil,
+        bootstrapCentralManager: Bool = true
+    ) {
+        self.waveformRingBuffer = waveformRingBuffer
         var cc: AsyncStream<ConnectionState>.Continuation!
         self.connectionStateStream = AsyncStream { cc = $0 }; self.connectionStateContinuation = cc
         var dc: AsyncStream<DeviceInfo>.Continuation!
@@ -57,7 +62,9 @@ public final class BLECentralDataSource: NSObject, @unchecked Sendable {
         var hc: AsyncStream<HeartRateSample>.Continuation!
         self.heartRateStream = AsyncStream { hc = $0 }; self.heartRateContinuation = hc
         super.init()
-        _centralManager = CBCentralManager(delegate: self, queue: bleQueue)
+        if bootstrapCentralManager {
+            _centralManager = CBCentralManager(delegate: self, queue: bleQueue)
+        }
     }
 
     // MARK: - Public API
@@ -201,27 +208,40 @@ public final class BLECentralDataSource: NSObject, @unchecked Sendable {
         metricsCollector.recordBytesReceived(data.count)
         HRSenseLogging.debug(.bleRaw, HexFormat.canonicalHexDump(data))
         for frame in frameAssembler.feed(data) {
-            switch frame {
-            case .data(let sample):
-                metricsCollector.recordSampleReceived()
-                heartRateContinuation?.yield(dataParser.parseSample(sample))
-            case .command(let command):
-                // Device→App commands (e.g. HELLO_ACK, INFO, ERROR)
-                HRSenseLogging.info(.protoCmd, "NOTIFY command opcode=0x\(String(command.opCode.rawValue, radix: 16))")
-                if let cont = commandResponseContinuation {
-                    commandResponseContinuation = nil
-                    cont.resume(returning: .command(command))
-                }
-            case .ack(let ack):
-                HRSenseLogging.info(.protoCmd, "NOTIFY ack seq=\(ack.seq) opcode=0x\(String(ack.opcode, radix: 16))")
-                if let cont = commandResponseContinuation {
-                    commandResponseContinuation = nil
-                    cont.resume(returning: .ack(ack))
-                }
-            case .event(let event):
-                HRSenseLogging.info(.protoCmd, "NOTIFY event")
-            case .waveform(let block):
-                HRSenseLogging.debug(.bleRaw, "NOTIFY waveform blockSeq=\(block.blockSeq)")
+            consume(frame: frame, receivedBytes: data.count)
+        }
+    }
+
+    func consume(frame: DecodedFrame, receivedBytes: Int) {
+        switch frame {
+        case .data(let sample):
+            metricsCollector.recordSampleReceived()
+            heartRateContinuation?.yield(dataParser.parseSample(sample))
+        case .command(let command):
+            // Device→App commands (e.g. HELLO_ACK, INFO, ERROR)
+            HRSenseLogging.info(.protoCmd, "NOTIFY command opcode=0x\(String(command.opCode.rawValue, radix: 16))")
+            if let cont = commandResponseContinuation {
+                commandResponseContinuation = nil
+                cont.resume(returning: .command(command))
+            }
+        case .ack(let ack):
+            HRSenseLogging.info(.protoCmd, "NOTIFY ack seq=\(ack.seq) opcode=0x\(String(ack.opcode, radix: 16))")
+            if let cont = commandResponseContinuation {
+                commandResponseContinuation = nil
+                cont.resume(returning: .ack(ack))
+            }
+        case .event:
+            HRSenseLogging.info(.protoCmd, "NOTIFY event")
+        case .waveform(let block):
+            HRSenseLogging.debug(.bleRaw, "NOTIFY waveform blockSeq=\(block.blockSeq)")
+            waveformRingBuffer?.recordBlock(
+                bytes: receivedBytes,
+                blockSeq: block.blockSeq,
+                sampleCount: block.sampleCount
+            )
+            let samples = dataParser.parseWaveformBlock(block)
+            if !samples.isEmpty {
+                waveformRingBuffer?.push(samples)
             }
         }
     }

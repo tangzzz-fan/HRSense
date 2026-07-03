@@ -8,6 +8,7 @@ final class FakeWaveformRingBuffer: WaveformRingBufferProtocol, @unchecked Senda
     var _samples: [WaveformSample] = []
     var _metrics = WaveformMetrics()
     var _totalPushed = 0
+    var recordedBlocks: [(bytes: Int, blockSeq: UInt32, sampleCount: Int)] = []
     var readCount = 0
 
     var metricsSnapshot: WaveformMetrics { _metrics }
@@ -16,6 +17,10 @@ final class FakeWaveformRingBuffer: WaveformRingBufferProtocol, @unchecked Senda
     func push(_ samples: [WaveformSample]) {
         _samples.append(contentsOf: samples)
         _totalPushed += samples.count
+    }
+
+    func recordBlock(bytes: Int, blockSeq: UInt32, sampleCount: Int) {
+        recordedBlocks.append((bytes, blockSeq, sampleCount))
     }
 
     func readRecent(durationMs: Double) -> [WaveformSample] {

@@ -1,4 +1,5 @@
 import Foundation
+import HRSenseProtocol
 
 /// Headless runtime used by the CLI entry and future CI automation.
 public final class SimulatorHeadlessRunner: @unchecked Sendable {
@@ -7,9 +8,14 @@ public final class SimulatorHeadlessRunner: @unchecked Sendable {
     private let output: @Sendable (String) -> Void
 
     private var generator: (any DataGeneratorProtocol)?
+    private var waveformStreamer: WaveformStreamer?
     private var scenarioEngine: ScenarioEngine?
     private var streamTimer: DispatchSourceTimer?
     private var streamStartTime: UInt64 = 0
+
+    var isStreaming: Bool { streamTimer != nil }
+    var isWaveformStreaming: Bool { waveformStreamer != nil }
+    var simulatedPeripheral: SimulatedPeripheral { peripheral }
 
     public init(
         launchOptions: SimulatorLaunchOptions,
@@ -24,6 +30,14 @@ public final class SimulatorHeadlessRunner: @unchecked Sendable {
         peripheral.onStateChanged = { [weak self] state in
             self?.output("simulator.state=\(state)")
         }
+        peripheral.commandProcessor.setStreamCallbacks(
+            onStart: { [weak self] sampleKinds in
+                self?.startStreaming(sampleKinds: sampleKinds)
+            },
+            onStop: { [weak self] in
+                self?.stopStreaming()
+            }
+        )
     }
 
     deinit {
@@ -41,7 +55,7 @@ public final class SimulatorHeadlessRunner: @unchecked Sendable {
 
         if launchOptions.autoStartStream {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
-                self?.startStream()
+                self?.startStreaming(sampleKinds: [DataKind.heartRate.rawValue])
             }
         }
 
@@ -50,7 +64,7 @@ public final class SimulatorHeadlessRunner: @unchecked Sendable {
 
     public func stop() {
         scenarioEngine?.stop()
-        stopStream()
+        stopStreaming()
         peripheral.stopAdvertising()
     }
 
@@ -60,32 +74,25 @@ public final class SimulatorHeadlessRunner: @unchecked Sendable {
     }
 
     public func startStream() {
-        guard streamTimer == nil, let generator else { return }
+        startStreaming(sampleKinds: [DataKind.heartRate.rawValue])
+    }
 
-        self.generator = generator
-        self.streamStartTime = DispatchTime.now().uptimeNanoseconds
-        generator.start()
-
-        let timer = DispatchSource.makeTimerSource(queue: .main)
-        timer.schedule(deadline: .now(), repeating: 1.0)
-        timer.setEventHandler { [weak self] in
-            guard let self, let generator = self.generator else { return }
-
-            let elapsedMs = UInt32(
-                (DispatchTime.now().uptimeNanoseconds - self.streamStartTime) / 1_000_000
-            )
-            let sample = generator.nextSample(timestampMs: elapsedMs)
-            _ = self.peripheral.pushSample(sample)
-        }
-        timer.resume()
-        streamTimer = timer
-
-        output("simulator.stream=started mode=\(launchOptions.generatorMode.rawValue)")
+    public func startStreaming(sampleKinds: [UInt8]) {
+        startHeartRateStreamingIfNeeded(sampleKinds: sampleKinds)
+        startWaveformStreamingIfNeeded(sampleKinds: sampleKinds)
+        let sampleKindList = sampleKinds.map(String.init).joined(separator: ",")
+        output("simulator.stream=started kinds=\(sampleKindList) mode=\(launchOptions.generatorMode.rawValue)")
     }
 
     public func stopStream() {
+        stopStreaming()
+    }
+
+    public func stopStreaming() {
         streamTimer?.cancel()
         streamTimer = nil
+        waveformStreamer?.stop()
+        waveformStreamer = nil
         generator?.stop()
         output("simulator.stream=stopped")
     }
@@ -99,10 +106,10 @@ public final class SimulatorHeadlessRunner: @unchecked Sendable {
             self?.setManualHeartRate(heartRate)
         }
         engine.onStreamStart = { [weak self] in
-            self?.startStream()
+            self?.startStreaming(sampleKinds: [DataKind.heartRate.rawValue])
         }
         engine.onStreamStop = { [weak self] in
-            self?.stopStream()
+            self?.stopStreaming()
         }
         engine.onDisconnect = { [weak self] in
             self?.peripheral.stopAdvertising()
@@ -160,5 +167,49 @@ public final class SimulatorHeadlessRunner: @unchecked Sendable {
         case .anomaly:
             return AnomalyHRGenerator()
         }
+    }
+
+    private func startHeartRateStreamingIfNeeded(sampleKinds: [UInt8]) {
+        guard sampleKinds.contains(DataKind.heartRate.rawValue) else {
+            streamTimer?.cancel()
+            streamTimer = nil
+            generator?.stop()
+            return
+        }
+        guard streamTimer == nil, let generator else { return }
+
+        self.generator = generator
+        self.streamStartTime = DispatchTime.now().uptimeNanoseconds
+        generator.start()
+
+        let timer = DispatchSource.makeTimerSource(queue: .main)
+        timer.schedule(deadline: .now(), repeating: 1.0)
+        timer.setEventHandler { [weak self] in
+            guard let self, let generator = self.generator else { return }
+
+            let elapsedMs = UInt32(
+                (DispatchTime.now().uptimeNanoseconds - self.streamStartTime) / 1_000_000
+            )
+            let sample = generator.nextSample(timestampMs: elapsedMs)
+            _ = self.peripheral.pushSample(sample)
+        }
+        timer.resume()
+        streamTimer = timer
+    }
+
+    private func startWaveformStreamingIfNeeded(sampleKinds: [UInt8]) {
+        guard sampleKinds.contains(DataKind.waveform.rawValue) else {
+            waveformStreamer?.stop()
+            waveformStreamer = nil
+            return
+        }
+        guard waveformStreamer == nil else { return }
+
+        let streamer = WaveformStreamer(generator: .ecg())
+        streamer.onBlock = { [weak self] fragment in
+            self?.peripheral.pushNotifyFragments([fragment])
+        }
+        streamer.start()
+        waveformStreamer = streamer
     }
 }

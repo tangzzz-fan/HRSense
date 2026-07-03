@@ -14,6 +14,7 @@ public struct RootView: View {
                 connectionStatusView
                 deviceInfoView
                 heartRateView
+                inferenceResultView
                 waveformView
                 errorBannerView
                 Spacer()
@@ -83,6 +84,40 @@ public struct RootView: View {
             }
         }
         .padding(.vertical, 32)
+    }
+
+    // MARK: - Inference result
+
+    @ViewBuilder
+    private var inferenceResultView: some View {
+        if let result = store.state.inference.latestResult {
+            HStack(spacing: 8) {
+                Image(systemName: result.label == "Stress" ? "exclamationmark.triangle.fill" : "checkmark.seal.fill")
+                    .foregroundColor(result.label == "Stress" ? .orange : .green)
+                Text(result.label)
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                if let prob = result.probabilities[result.label] {
+                    Text(String(format: "(%.0f%%)", prob * 100))
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                Spacer()
+                if result.inferenceTimeMs > 0 {
+                    Text(String(format: "%.1f ms", result.inferenceTimeMs))
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .monospacedDigit()
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill((result.label == "Stress" ? Color.orange : Color.green).opacity(0.12))
+            )
+            .padding(.horizontal)
+        }
     }
 
     // MARK: - Waveform

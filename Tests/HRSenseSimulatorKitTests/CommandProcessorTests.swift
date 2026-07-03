@@ -46,6 +46,28 @@ final class CommandProcessorTests: XCTestCase {
         XCTAssertEqual(processor.state, .streaming)
     }
 
+    func test_startStreamInvokesCallbackWithRequestedSampleKinds() {
+        let expectation = expectation(description: "start callback")
+        var receivedKinds: [UInt8] = []
+        let processor = CommandProcessor(
+            config: SimulatorConfig(),
+            onStreamStart: { kinds in
+                receivedKinds = kinds
+                expectation.fulfill()
+            }
+        )
+        processor.didConnect()
+        _ = processor.process(command: Command.hello(capabilities: Capabilities(rawValue: 0x01)), seq: 0)
+
+        _ = processor.process(
+            command: Command.startStream(sampleKinds: [DataKind.heartRate.rawValue, DataKind.waveform.rawValue]),
+            seq: 1
+        )
+
+        wait(for: [expectation], timeout: 1.0)
+        XCTAssertEqual(receivedKinds, [DataKind.heartRate.rawValue, DataKind.waveform.rawValue])
+    }
+
     func test_stopStreamTransitionsBack() {
         let processor = CommandProcessor(config: SimulatorConfig())
         processor.didConnect()
@@ -56,16 +78,29 @@ final class CommandProcessorTests: XCTestCase {
         XCTAssertEqual(processor.state, .handshakeDone)
     }
 
+    func test_stopStreamInvokesStopCallback() {
+        let expectation = expectation(description: "stop callback")
+        let processor = CommandProcessor(
+            config: SimulatorConfig(),
+            onStreamStop: {
+                expectation.fulfill()
+            }
+        )
+        processor.didConnect()
+        _ = processor.process(command: Command.hello(capabilities: Capabilities(rawValue: 0x01)), seq: 0)
+        _ = processor.process(command: Command.startStream(), seq: 1)
+
+        _ = processor.process(command: Command.stopStream(), seq: 2)
+
+        wait(for: [expectation], timeout: 1.0)
+    }
+
     func test_unknownOpcodeReturnsError() {
         let processor = CommandProcessor(config: SimulatorConfig())
         processor.didConnect()
-        // Create a command with a purpose-built unknown opcode raw byte
-        let cmd = Command(opCode: .hello, flags: CommandFlags(isResponse: false), params: [])
-        // Send a valid opcode (hello) — that's a well-known path. The "error" opcode
-        // case in the switch returns []. Test that the switch handles it without crashing:
+        // The ".error" opcode path returns [] — validate that the simulator handles it safely.
         let errorCmd = Command(opCode: .error, flags: CommandFlags(isResponse: false), params: [])
         let responses = processor.process(command: errorCmd, seq: 0)
-        // .error case returns [] — valid, no-op for the simulator
         XCTAssertEqual(responses.count, 0)
     }
 

@@ -1,0 +1,15 @@
+{
+  "originHash" : "1ceee16930c2d23cb7754eb67e60e1943d28d3c5237a03f81cec54b2b68a9947",
+  "pins" : [
+    {
+      "identity" : "tgreduxkit",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/tangzzz-fan/TGReduxKit.git",
+      "state" : {
+        "revision" : "0d2a3825a82c05bb2ebb2b31e01abed9bd7839f2",
+        "version" : "2.0.0"
+      }
+    }
+  ],
+  "version" : 3
+}

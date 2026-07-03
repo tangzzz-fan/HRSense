@@ -140,7 +140,7 @@ public final class DeviceRepositoryImpl: DeviceRepository, @unchecked Sendable {
         // Step 3: Send START_STREAM
         HRSenseLogging.info(.protoCmd, "HANDSHAKE: sending START_STREAM")
         _ = try await bleDataSource.sendCommandAndWait(
-            Command.startStream(sampleKinds: [0x01]),
+            Command.startStream(sampleKinds: [DataKind.heartRate.rawValue, DataKind.waveform.rawValue]),
             timeout: 5.0
         )
 

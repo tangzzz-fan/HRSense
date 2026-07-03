@@ -73,6 +73,31 @@ final class CoreMLServiceTests: XCTestCase {
         XCTAssertNil(prediction)
     }
 
+    func test_bundleCatalogHandlesDuplicateBundleURLs() {
+        let testBundle = Bundle(for: Self.self)
+        let catalog = BundleCoreMLModelCatalog(
+            bundles: [testBundle, testBundle, testBundle],
+            supportedExtensions: []
+        )
+
+        let models = catalog.discoverModels()
+
+        XCTAssertTrue(models.isEmpty)
+    }
+
+    func test_defaultDiscoveryBundlesStayInsideMainBundleScope() {
+        let bundles = BundleCoreMLModelCatalog.defaultDiscoveryBundles()
+        let mainBundlePath = Bundle.main.bundleURL.standardizedFileURL.path
+
+        XCTAssertFalse(bundles.isEmpty)
+        XCTAssertTrue(
+            bundles.allSatisfy { bundle in
+                let bundlePath = bundle.bundleURL.standardizedFileURL.path
+                return bundlePath == mainBundlePath || bundlePath.hasPrefix(mainBundlePath + "/")
+            }
+        )
+    }
+
     private func placeholderModelURL() -> URL {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

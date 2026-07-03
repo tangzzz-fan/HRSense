@@ -72,14 +72,22 @@ public final class SimulatedPeripheral: NSObject, @unchecked Sendable {
 
     // MARK: - Init
 
-    public init(config: SimulatorConfig = SimulatorConfig()) {
+    public init(
+        config: SimulatorConfig = SimulatorConfig(),
+        onStreamStart: (([UInt8]) -> Void)? = nil,
+        onStreamStop: (() -> Void)? = nil
+    ) {
         self.serviceUUID = CBUUID(string: "48525330-0001-4B8E-9F2A-1D3C5E7B9A10")
         self.notifyCharUUID = CBUUID(string: "48525330-0002-4B8E-9F2A-1D3C5E7B9A10")
         self.writeCharUUID = CBUUID(string: "48525330-0003-4B8E-9F2A-1D3C5E7B9A10")
         self.infoCharUUID = CBUUID(string: "48525330-0004-4B8E-9F2A-1D3C5E7B9A10")
         self.otaDataCharUUID = CBUUID(string: "48525330-0005-4B8E-9F2A-1D3C5E7B9A10")
 
-        self.commandProcessor = CommandProcessor(config: config)
+        self.commandProcessor = CommandProcessor(
+            config: config,
+            onStreamStart: onStreamStart,
+            onStreamStop: onStreamStop
+        )
 
         super.init()
 
@@ -166,6 +174,11 @@ public final class SimulatedPeripheral: NSObject, @unchecked Sendable {
 
     /// Push raw command/response fragments via notify.
     public func pushResponse(_ fragments: [Data]) {
+        pushNotifyFragments(fragments)
+    }
+
+    /// Push arbitrary notify fragments over the Data/Notify channel.
+    public func pushNotifyFragments(_ fragments: [Data]) {
         bleQueue.async { [weak self] in
             guard let self,
                   self._centralSubscribed,

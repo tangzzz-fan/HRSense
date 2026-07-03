@@ -121,24 +121,64 @@ public struct BundleCoreMLModelCatalog: CoreMLModelCatalog, @unchecked Sendable 
     private let supportedExtensions: Set<String>
 
     public init(
-        bundles: [Bundle] = [Bundle.main] + Bundle.allBundles + Bundle.allFrameworks,
+        bundles: [Bundle]? = nil,
         supportedExtensions: [String] = ["mlmodelc", "mlpackage", "mlmodel"]
     ) {
-        self.bundles = bundles
+        self.bundles = bundles ?? Self.defaultDiscoveryBundles()
         self.supportedExtensions = Set(supportedExtensions)
     }
 
     public func discoverModels() -> [ModelDescriptor] {
-        let uniqueBundles = Array(
-            Dictionary(uniqueKeysWithValues: bundles.map { ($0.bundleURL.standardizedFileURL, $0) }).values
-        )
+        let uniqueBundles = deduplicateBundles(bundles)
 
         let candidateURLs = uniqueBundles.flatMap(findModelURLs(in:))
-        let uniqueURLs = Array(
-            Dictionary(uniqueKeysWithValues: candidateURLs.map { ($0.standardizedFileURL, $0) }).values
-        )
+        let uniqueURLs = deduplicateURLs(candidateURLs)
 
         return uniqueURLs.compactMap(CoreMLModelInspector.inspectModel(at:))
+    }
+
+    /// Restrict default discovery to bundles inside the app's own bundle root.
+    /// This avoids scanning system/private frameworks that may contain unrelated
+    /// CoreML assets and generate noisy runtime errors when inspected.
+    static func defaultDiscoveryBundles() -> [Bundle] {
+        let mainBundleURL = Bundle.main.bundleURL.standardizedFileURL
+        let appScopedBundles = ([Bundle.main] + Bundle.allBundles + Bundle.allFrameworks).filter { bundle in
+            let bundleURL = bundle.bundleURL.standardizedFileURL
+            return bundleURL.path == mainBundleURL.path || bundleURL.path.hasPrefix(mainBundleURL.path + "/")
+        }
+
+        return appScopedBundles.isEmpty ? [Bundle.main] : appScopedBundles
+    }
+
+    // Xcode/iOS runtime can surface the same bundle multiple times across
+    // Bundle.main, allBundles, and allFrameworks. Use stable manual dedup
+    // instead of Dictionary(uniqueKeysWithValues:), which would trap.
+    private func deduplicateBundles(_ bundles: [Bundle]) -> [Bundle] {
+        var seen: Set<URL> = []
+        var uniqueBundles: [Bundle] = []
+
+        for bundle in bundles {
+            let key = bundle.bundleURL.standardizedFileURL
+            if seen.insert(key).inserted {
+                uniqueBundles.append(bundle)
+            }
+        }
+
+        return uniqueBundles
+    }
+
+    private func deduplicateURLs(_ urls: [URL]) -> [URL] {
+        var seen: Set<URL> = []
+        var uniqueURLs: [URL] = []
+
+        for url in urls {
+            let key = url.standardizedFileURL
+            if seen.insert(key).inserted {
+                uniqueURLs.append(url)
+            }
+        }
+
+        return uniqueURLs
     }
 
     private func findModelURLs(in bundle: Bundle) -> [URL] {

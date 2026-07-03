@@ -42,6 +42,34 @@ public final class BLEDataParser: @unchecked Sendable {
         )
     }
 
+    /// Convert a protocol WaveformBlock into domain WaveformSample values.
+    /// - Parameter block: the raw protocol waveform block.
+    /// - Returns: normalized waveform samples with absolute timestamps.
+    public func parseWaveformBlock(_ block: HRSenseProtocol.WaveformBlock) -> [WaveformSample] {
+        guard let type = WaveformType(rawValue: block.waveformType), block.sampleRateHz > 0 else {
+            return []
+        }
+
+        let startTime: Date
+        if let t0 = localT0 {
+            startTime = t0.addingTimeInterval(Double(block.startTimestampMs) / 1000.0)
+        } else {
+            startTime = Date()
+        }
+
+        let sampleInterval = 1.0 / Double(block.sampleRateHz)
+        let normalizationFactor = normalizationDivisor(sampleBits: block.sampleBits)
+
+        return block.samples.enumerated().map { index, rawValue in
+            WaveformSample(
+                type: type,
+                sampleRateHz: Int(block.sampleRateHz),
+                timestamp: startTime.addingTimeInterval(Double(index) * sampleInterval),
+                value: Float(rawValue) / normalizationFactor
+            )
+        }
+    }
+
     /// Parse device info from a HELLO_ACK response payload.
     /// - Parameters:
     ///   - peripheralID: the peripheral UUID.
@@ -74,5 +102,16 @@ public final class BLEDataParser: @unchecked Sendable {
     public static func detectGap(prevSeq: UInt32, currentSeq: UInt32) -> Int {
         let diff = Int(currentSeq) - Int(prevSeq)
         return max(0, diff - 1)
+    }
+
+    private func normalizationDivisor(sampleBits: UInt8) -> Float {
+        switch sampleBits {
+        case 12:
+            return 2048.0
+        case 16:
+            return 32768.0
+        default:
+            return 32768.0
+        }
     }
 }

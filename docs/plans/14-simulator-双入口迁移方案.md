@@ -111,7 +111,7 @@ swift build
 ### 后续 App 壳
 
 ```bash
-xcodebuild -project Apps/HRSenseSimulator/HRSenseSimulator.xcodeproj \
+xcodebuild -workspace HRSense.xcworkspace \
   -scheme HRSenseSimulator \
   -destination "platform=macOS" \
   build

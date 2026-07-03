@@ -8,6 +8,9 @@ public protocol WaveformRingBufferProtocol: AnyObject, Sendable {
     /// Push a batch of waveform samples (appends, evicts oldest if at capacity).
     func push(_ samples: [WaveformSample])
 
+    /// Record block-level receive metrics before sample conversion.
+    func recordBlock(bytes: Int, blockSeq: UInt32, sampleCount: Int)
+
     /// Read samples within the given trailing window (ms).
     /// - Parameter durationMs: lookback window in milliseconds.
     /// - Returns: samples within that window, oldest-to-newest.

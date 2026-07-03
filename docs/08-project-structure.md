@@ -48,7 +48,7 @@ HRSense/
 │   └── StressClassifier_v1.mlpackage
 ├── proto/                        # (可选)Protobuf .proto schema，与 iOS/Android/FW 共享(见 03 §6.4)
 ├── Scenarios/                    # 模拟器场景脚本(JSON) + 录制数据集(CSV)
-├── HRSense.xcworkspace           # 工作区：聚合两个 app 工程 + 本地 Package
+├── HRSense.xcworkspace           # 工作区：统一打开两个 app 工程 + 根本地 Package
 ├── docs/                         # 本仓库文档
 ├── tools/                        # coremltools 转换脚本等(构建期)
 ├── THIRD_PARTY_LICENSES.md       # 第三方依赖 / 模型来源与许可登记
@@ -269,8 +269,9 @@ graph TD
 
 ## 8. Xcode 工作区与本地依赖
 
-- `HRSense.xcworkspace` 聚合：根 SwiftPM 包 + `Apps/HRSenseApp.xcodeproj` + `Apps/HRSenseSimulator.xcodeproj`。
+- `HRSense.xcworkspace` 聚合：`Package.swift` + `Apps/HRSenseApp/HRSenseApp.xcodeproj` + `Apps/HRSenseSimulator/HRSenseSimulator.xcodeproj`。
 - 两个 app 工程通过 **Add Local Package**（路径指向仓库根）引用所需 products。
+- 日常开发只打开 `HRSense.xcworkspace`；不要同时分别打开两个 `.xcodeproj`，否则 Xcode 可能对同一个本地包路径 `../..` 产生冲突解析并误报 `Missing package product`。
 - 好处：改包即时生效、断点可跨包调试、CI 可单独 `swift test` 跑库测试，App 用 `xcodebuild` 跑。
 
 ## 9. 资源与合规

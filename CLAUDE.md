@@ -4,19 +4,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Current Phase
 
-**Planning / documentation phase.** This repo contains no implementation code — only architecture and protocol design documents. All design doc statuses are `draft`, though key decisions listed below are considered frozen for v1. See `docs/11-delivery-plan.md` for the execution plan (M0–M12 milestones with concrete acceptance criteria).
+**Implementation phase.** The repo now contains a real SwiftPM codebase, two App shells under `Apps/`, and a root `HRSense.xcworkspace`. Design docs are still the source of truth for architecture and protocol contracts, but build/test validation must use the live codebase and the workspace-backed app shells.
 
 ## Commands
 
-No build/test commands yet — no source code exists. These are the anticipated commands for when implementation begins (M0+):
+Use these commands as the default validation entry points:
 
 ```bash
 swift build          # Root Package.swift with multiple targets
 swift test           # Run all unit tests
 swift test --filter HRSenseProtocolTests  # Run a single test target
-xcodebuild -workspace HRSense.xcworkspace -scheme HRSenseApp build
-xcodebuild -workspace HRSense.xcworkspace -scheme HRSenseSimulator build
+xcodebuild -workspace HRSense.xcworkspace -scheme HRSenseApp \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' build
+xcodebuild -workspace HRSense.xcworkspace -scheme HRSenseSimulator \
+  -destination 'platform=macOS' build
 ```
+
+Workspace rule:
+- **Always open `HRSense.xcworkspace` in Xcode.**
+- Do **not** keep `Apps/HRSenseApp/HRSenseApp.xcodeproj` and `Apps/HRSenseSimulator/HRSenseSimulator.xcodeproj` open as separate Xcode windows at the same time, because both reference the same local package path (`../..`) and Xcode may surface false "Missing package product" errors.
 
 Execution-quality notes for when code exists:
 - Treat **both** `HRSenseApp` and `HRSenseSimulator` as first-class executables. Do not validate only the iOS app shell while ignoring simulator build health.
@@ -60,7 +66,7 @@ The macOS simulator is not a throwaway stub — it's designed as a **persistent 
 
 ### Project Structure: SwiftPM-First
 
-All reusable logic lives in SPM targets under a single root `Package.swift`. The two executable apps (iOS app, macOS simulator) are thin Xcode project shells that only handle entry points, permissions (`Info.plist`), and composition root wiring. See `docs/08-project-structure.md`.
+All reusable logic lives in SPM targets under a single root `Package.swift`. The two executable apps (iOS app, macOS simulator) are thin Xcode project shells that only handle entry points, permissions (`Info.plist`), and composition root wiring. Open them through the root `HRSense.xcworkspace`, not as isolated projects. See `docs/08-project-structure.md`.
 
 ### Persistence Strategy: Replaceable Storage Boundary
 

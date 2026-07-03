@@ -240,7 +240,7 @@ flowchart LR
 4. 用新模型覆盖 `Models/StressClassifier_v1.mlpackage`。
 5. 执行：
    - `swift test --filter HRSenseComputeTests`
-   - `xcodebuild -project Apps/HRSenseApp/HRSenseApp.xcodeproj -scheme HRSenseApp -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' build`
+   - `xcodebuild -workspace HRSense.xcworkspace -scheme HRSenseApp -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' build`
 
 ## 风险与边界
 

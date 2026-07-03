@@ -9,18 +9,27 @@ public final class CommandProcessor: @unchecked Sendable {
 
     public private(set) var state: DeviceState = .advertising
     private let config: SimulatorConfig
-    private var onGeneratorStart: (() -> Void)?
-    private var onGeneratorStop: (() -> Void)?
+    private var onStreamStart: (([UInt8]) -> Void)?
+    private var onStreamStop: (() -> Void)?
     private var streamSeq: UInt8 = 0
 
     public init(
         config: SimulatorConfig,
-        onGeneratorStart: (() -> Void)? = nil,
-        onGeneratorStop: (() -> Void)? = nil
+        onStreamStart: (([UInt8]) -> Void)? = nil,
+        onStreamStop: (() -> Void)? = nil
     ) {
         self.config = config
-        self.onGeneratorStart = onGeneratorStart
-        self.onGeneratorStop = onGeneratorStop
+        self.onStreamStart = onStreamStart
+        self.onStreamStop = onStreamStop
+    }
+
+    /// Updates the runtime callbacks used to start/stop simulator data streams.
+    public func setStreamCallbacks(
+        onStart: (([UInt8]) -> Void)?,
+        onStop: (() -> Void)?
+    ) {
+        self.onStreamStart = onStart
+        self.onStreamStop = onStop
     }
 
     /// Process a decoded Command from the App. Returns response fragments (if any).
@@ -39,7 +48,7 @@ public final class CommandProcessor: @unchecked Sendable {
             return handleGetInfo(seq: seq, mtu: mtu)
 
         case .startStream:
-            return handleStartStream(seq: seq, mtu: mtu)
+            return handleStartStream(command: command, seq: seq, mtu: mtu)
 
         case .stopStream:
             return handleStopStream(seq: seq, mtu: mtu)
@@ -72,7 +81,7 @@ public final class CommandProcessor: @unchecked Sendable {
 
     /// Handle disconnect.
     public func didDisconnect() {
-        onGeneratorStop?()
+        onStreamStop?()
         state = .advertising
     }
 
@@ -109,9 +118,11 @@ public final class CommandProcessor: @unchecked Sendable {
         return encodeCommand(response, seq: seq, mtu: mtu)
     }
 
-    private func handleStartStream(seq: UInt8, mtu: Int) -> [Data] {
+    private func handleStartStream(command: Command, seq: UInt8, mtu: Int) -> [Data] {
         state = state.transition(on: .streamStarted)
-        onGeneratorStart?()
+        let sampleKinds = command.params.first(where: { $0.tag == .sampleSeq })?.value
+            ?? [DataKind.heartRate.rawValue]
+        onStreamStart?(sampleKinds)
         // ACK the start
         let ack = ACKPayload(seq: seq, opcode: CommandOpCode.startStream.rawValue, status: 0x00)
         let fragments = encodeACK(ack, seq: seq, mtu: mtu)
@@ -120,7 +131,7 @@ public final class CommandProcessor: @unchecked Sendable {
 
     private func handleStopStream(seq: UInt8, mtu: Int) -> [Data] {
         state = state.transition(on: .streamStopped)
-        onGeneratorStop?()
+        onStreamStop?()
         let ack = ACKPayload(seq: seq, opcode: CommandOpCode.stopStream.rawValue, status: 0x00)
         return encodeACK(ack, seq: seq, mtu: mtu)
     }
