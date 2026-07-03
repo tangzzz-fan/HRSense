@@ -81,12 +81,9 @@ public final class OTARepositoryImpl: OTARepository, @unchecked Sendable {
         }
 
         // Check imageCRC32 match for resume
-        let canResume: Bool
         if let lastCRC = lastTransferredCRC32, lastCRC == computedCRC, lastResumeOffset > 0, lastResumeOffset < fullImage.count {
-            canResume = true
             HRSenseLogging.info(.ota, "Resuming transfer from offset=\(lastResumeOffset) (CRC match)")
         } else {
-            canResume = false
             lastResumeOffset = 0
             HRSenseLogging.info(.ota, "Starting fresh transfer (no CRC match or first attempt)")
         }

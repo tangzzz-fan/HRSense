@@ -36,7 +36,6 @@ public final class StateTransitionRecorder: @unchecked Sendable {
 /// Factory: produces a Redux Logging Middleware.
 public func makeLoggingMiddleware() -> Middleware<AppState, Action> {
     { store, action, next in
-        let before = store.state
         next(action)
         let after = store.state
 

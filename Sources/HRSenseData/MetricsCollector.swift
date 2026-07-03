@@ -1,4 +1,5 @@
 import Foundation
+import HRSenseCore
 
 /// Enhanced MetricsCollector with rate-based KPIs for M7.
 ///
@@ -97,7 +98,24 @@ public final class MetricsCollector: @unchecked Sendable {
     /// Full KPI snapshot for the diagnostics panel.
     public func kpiSnapshot() -> KPISnapshot {
         lock.withLock {
-            KPISnapshot(
+            let connectionSuccessRate = _connectionAttempts == 0
+                ? 0
+                : Double(_connectionSuccesses) / Double(_connectionAttempts)
+            let totalSamples = _totalSamplesReceived + _samplesLost
+            let sampleLossRate = totalSamples == 0
+                ? 0
+                : Double(_samplesLost) / Double(totalSamples)
+            let commandTimeoutRate = _commandsSent == 0
+                ? 0
+                : Double(_commandTimeouts) / Double(_commandsSent)
+            let throughputBytesPerSec = elapsed > 0
+                ? Double(_bytesReceived) / elapsed
+                : 0
+            let otaSuccessRate = _otaAttempts == 0
+                ? 0
+                : Double(_otaSuccesses) / Double(_otaAttempts)
+
+            return KPISnapshot(
                 connectionSuccessRate: connectionSuccessRate,
                 reconnectCount: _reconnectCount,
                 commandTimeoutRate: commandTimeoutRate,
@@ -122,31 +140,5 @@ public struct MetricsSnapshot: Equatable, Sendable {
         self.samplesLost = samplesLost
         self.reconnectCount = reconnectCount
         self.bytesReceived = bytesReceived
-    }
-}
-
-/// KPI snapshot for diagnostics display (6 key metrics).
-public struct KPISnapshot: Equatable, Sendable {
-    public let connectionSuccessRate: Double
-    public let reconnectCount: Int
-    public let commandTimeoutRate: Double
-    public let sampleLossRate: Double
-    public let throughputBytesPerSec: Double
-    public let otaSuccessRate: Double
-
-    public init(
-        connectionSuccessRate: Double,
-        reconnectCount: Int,
-        commandTimeoutRate: Double,
-        sampleLossRate: Double,
-        throughputBytesPerSec: Double,
-        otaSuccessRate: Double
-    ) {
-        self.connectionSuccessRate = connectionSuccessRate
-        self.reconnectCount = reconnectCount
-        self.commandTimeoutRate = commandTimeoutRate
-        self.sampleLossRate = sampleLossRate
-        self.throughputBytesPerSec = throughputBytesPerSec
-        self.otaSuccessRate = otaSuccessRate
     }
 }

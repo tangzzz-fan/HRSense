@@ -1,7 +1,6 @@
 import SwiftUI
 import HRSenseCore
 import HRSenseProtocol
-import HRSenseData
 
 #if DEBUG
 
@@ -86,7 +85,7 @@ public struct DiagnosticPanelView: View {
                         isExporting = true
                     }
                     .sheet(isPresented: $isExporting) {
-                        Text("⚠️ Export requires share sheet")
+                        Text("Export requires a platform share sheet host.")
                             .padding()
                     }
                 }
