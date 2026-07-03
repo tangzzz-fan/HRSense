@@ -4,8 +4,11 @@ import HRSenseProtocol
 
 /// Wraps CBPeripheralManager to act as a BLE peripheral (simulated device).
 ///
-/// All CBPeripheralManagerDelegate callbacks are dispatched on the internal
-/// serial queue, isolating state mutation to one domain.
+/// GATT characteristics (doc 03 §3.1):
+///   0002 Data/Notify   — device→App HR/waveform/events
+///   0003 Control/Write  — App→device commands (Write + WriteWithoutResponse)
+///   0004 Info            — readable device metadata
+///   0005 OTA Data        — App→device firmware image (WriteWithoutResponse)
 public final class SimulatedPeripheral: NSObject, @unchecked Sendable {
 
     // Synchronization: all mutable state is accessed only on the `bleQueue`.
@@ -49,9 +52,15 @@ public final class SimulatedPeripheral: NSObject, @unchecked Sendable {
     private let notifyCharUUID: CBUUID
     private let writeCharUUID: CBUUID
     private let infoCharUUID: CBUUID
+    private let otaDataCharUUID: CBUUID
 
     private var _notifyCharacteristic: CBMutableCharacteristic?
     private var _infoCharacteristic: CBMutableCharacteristic?
+
+    // MARK: - OTA handler (M6)
+
+    /// OTA event handler — routes OTA commands (0003) and image data (0005).
+    public var otaEventHandler: OTAEventHandler?
 
     // MARK: - Callbacks
 
@@ -68,6 +77,7 @@ public final class SimulatedPeripheral: NSObject, @unchecked Sendable {
         self.notifyCharUUID = CBUUID(string: "48525330-0002-4B8E-9F2A-1D3C5E7B9A10")
         self.writeCharUUID = CBUUID(string: "48525330-0003-4B8E-9F2A-1D3C5E7B9A10")
         self.infoCharUUID = CBUUID(string: "48525330-0004-4B8E-9F2A-1D3C5E7B9A10")
+        self.otaDataCharUUID = CBUUID(string: "48525330-0005-4B8E-9F2A-1D3C5E7B9A10")
 
         self.commandProcessor = CommandProcessor(config: config)
 
@@ -101,12 +111,19 @@ public final class SimulatedPeripheral: NSObject, @unchecked Sendable {
                 value: nil,
                 permissions: [.readable]
             )
+            // OTA Data (0005) — Write Without Response only, for high-throughput image chunks
+            let otaDataChar = CBMutableCharacteristic(
+                type: self.otaDataCharUUID,
+                properties: [.writeWithoutResponse],
+                value: nil,
+                permissions: [.writeable]
+            )
 
             self._notifyCharacteristic = notifyChar
             self._infoCharacteristic = infoChar
 
             let service = CBMutableService(type: self.serviceUUID, primary: true)
-            service.characteristics = [notifyChar, writeChar, infoChar]
+            service.characteristics = [notifyChar, writeChar, infoChar, otaDataChar]
 
             pm.add(service)
 
@@ -195,6 +212,17 @@ extension SimulatedPeripheral: CBPeripheralManagerDelegate {
     public func peripheralManager(_ peripheral: CBPeripheralManager,
                                    didReceiveWrite requests: [CBATTRequest]) {
         for request in requests {
+            // Route by characteristic: 0003 = commands, 0005 = OTA image data
+            if request.characteristic.uuid == otaDataCharUUID, let value = request.value {
+                // OTA image chunk received via dedicated high-throughput channel
+                HRSenseLogging.debug(.ota, "OTA_WRITE(0005) received: len=\(value.count)")
+                // OTA data is handled by the OTARepositoryImpl on the App side;
+                // on the device side (simulator), OTA data chunks are processed
+                // by OTAEventHandler.receiveOTAChunk when called from the command processor
+                peripheral.respond(to: request, withResult: .success)
+                continue
+            }
+
             guard request.characteristic.uuid == writeCharUUID,
                   let value = request.value else {
                 peripheral.respond(to: request, withResult: .requestNotSupported)
