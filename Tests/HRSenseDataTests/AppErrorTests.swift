@@ -21,4 +21,14 @@ final class AppErrorTests: XCTestCase {
             XCTFail("Expected .handshakeFailed")
         }
     }
+
+    func test_localizedDescription_forCommandTimeout() {
+        let description = AppError.commandTimeout(opcode: 0x01).localizedDescription
+        XCTAssertEqual(description, "Command 0x1 timed out while waiting for a response.")
+    }
+
+    func test_localizedDescription_forHandshakeFailure() {
+        let description = AppError.handshakeFailed(reason: "notify subscription did not become active").localizedDescription
+        XCTAssertEqual(description, "Handshake failed: notify subscription did not become active")
+    }
 }

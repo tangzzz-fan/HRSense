@@ -31,6 +31,13 @@ public func makeConnectionMiddleware(
                     }
                 }
             }
+            Task {
+                for await device in deviceRepo.discoveredDevicesStream {
+                    await MainActor.run {
+                        store.dispatch(.deviceDiscovered(device))
+                    }
+                }
+            }
             // Subscribe to device info stream (updated after handshake)
             Task {
                 for await info in deviceRepo.deviceInfoStream {
@@ -46,9 +53,6 @@ public func makeConnectionMiddleware(
             next(action)
             Task {
                 await deviceRepo.startScanning()
-                for await device in deviceRepo.discoveredDevicesStream {
-                    await MainActor.run { store.dispatch(.deviceDiscovered(device)) }
-                }
             }
 
         case .stopScanning:
@@ -64,6 +68,7 @@ public func makeConnectionMiddleware(
                     _ = try await deviceRepo.performHandshake()
                     // State transitions to .connected are handled by the state stream subscription above
                 } catch {
+                    HRSenseLogging.error(.state, "BLE connect/handshake failed: \(error.localizedDescription)")
                     await MainActor.run {
                         store.dispatch(.errorOccurred(error is AppError ? (error as! AppError) : .connectionTimeout))
                     }

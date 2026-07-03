@@ -27,6 +27,7 @@ final class FakeDeviceRepository: DeviceRepository, @unchecked Sendable {
     var disconnectCallCount = 0
     var connectedIDs: [UUID] = []
     var handshakeCallCount = 0
+    var emitConnectedAfterHandshake = false
     var handshakeResult: Result<DeviceInfo, Error> = .success(
         DeviceInfo(peripheralIdentifier: UUID(), name: "Test", model: "M1",
                    firmwareVersion: "1.0", protocolVersion: 1, capabilities: 0)
@@ -67,6 +68,9 @@ final class FakeDeviceRepository: DeviceRepository, @unchecked Sendable {
         switch handshakeResult {
         case .success(let info):
             devInfoCont.yield(info)
+            if emitConnectedAfterHandshake {
+                emitConnectionState(.connected)
+            }
             return info
         case .failure(let error):
             throw error

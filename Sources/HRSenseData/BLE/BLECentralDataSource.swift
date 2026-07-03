@@ -3,6 +3,74 @@ import CoreBluetooth
 import HRSenseProtocol
 import HRSenseCore
 
+struct HandshakeReadinessGate {
+    private(set) var hasNotifyCharacteristic = false
+    private(set) var hasWriteCharacteristic = false
+    private(set) var isNotifySubscriptionActive = false
+    private(set) var hasEmittedHandshaking = false
+
+    mutating func markNotifyCharacteristicDiscovered() {
+        hasNotifyCharacteristic = true
+    }
+
+    mutating func markWriteCharacteristicDiscovered() {
+        hasWriteCharacteristic = true
+    }
+
+    mutating func updateNotifySubscription(isActive: Bool) -> Bool {
+        isNotifySubscriptionActive = isActive
+        return emitHandshakingIfReady()
+    }
+
+    mutating func reset() {
+        hasNotifyCharacteristic = false
+        hasWriteCharacteristic = false
+        isNotifySubscriptionActive = false
+        hasEmittedHandshaking = false
+    }
+
+    private mutating func emitHandshakingIfReady() -> Bool {
+        guard hasNotifyCharacteristic,
+              hasWriteCharacteristic,
+              isNotifySubscriptionActive,
+              !hasEmittedHandshaking else {
+            return false
+        }
+        hasEmittedHandshaking = true
+        return true
+    }
+}
+
+struct PendingCommandIdentity: Equatable {
+    let token: UInt64
+    let opcode: UInt8
+}
+
+struct PendingCommandTimeoutCoordinator {
+    private(set) var pendingIdentity: PendingCommandIdentity?
+    private var nextToken: UInt64 = 0
+
+    mutating func register(opcode: UInt8) -> PendingCommandIdentity {
+        let identity = PendingCommandIdentity(token: nextToken, opcode: opcode)
+        nextToken &+= 1
+        pendingIdentity = identity
+        return identity
+    }
+
+    mutating func clear(_ identity: PendingCommandIdentity? = nil) {
+        guard let identity else {
+            pendingIdentity = nil
+            return
+        }
+        guard pendingIdentity == identity else { return }
+        pendingIdentity = nil
+    }
+
+    func canTimeout(_ identity: PendingCommandIdentity) -> Bool {
+        pendingIdentity == identity
+    }
+}
+
 /// The single file in the project that imports CoreBluetooth.
 ///
 /// Wraps CBCentralManager and bridges delegate callbacks into AsyncStreams
@@ -31,6 +99,8 @@ public final class BLECentralDataSource: NSObject, @unchecked Sendable {
     private var _notifyCharacteristic: CBCharacteristic?
     private var _writeCharacteristic: CBCharacteristic?
     private var _otaDataCharacteristic: CBCharacteristic?
+    private var _handshakeReadinessGate = HandshakeReadinessGate()
+    private var _pendingCommandCoordinator = PendingCommandTimeoutCoordinator()
 
     private var connectionStateContinuation: AsyncStream<ConnectionState>.Continuation?
     private var discoveredDevicesContinuation: AsyncStream<DeviceInfo>.Continuation?
@@ -46,6 +116,21 @@ public final class BLECentralDataSource: NSObject, @unchecked Sendable {
     public let metricsCollector = MetricsCollector()
     public let connectionStateMachine = BLEConnectionStateMachine()
     public var mtu: Int = 185
+
+    public var connectionState: ConnectionState {
+        bleQueue.sync { _state }
+    }
+
+    public var connectedPeripheralIdentifier: UUID? {
+        bleQueue.sync { _connectedPeripheral?.identifier }
+    }
+
+    public var connectedDeviceInfo: DeviceInfo? {
+        bleQueue.sync {
+            guard let identifier = _connectedPeripheral?.identifier else { return nil }
+            return _discoveredPeripherals[identifier]?.1
+        }
+    }
 
     /// Persistent FrameAssembler — one per connection to correctly reassemble multi-fragment frames.
     private var frameAssembler = FrameAssembler()
@@ -86,6 +171,7 @@ public final class BLECentralDataSource: NSObject, @unchecked Sendable {
         bleQueue.async { [weak self] in
             guard let self, let cm = self._centralManager,
                   let (p, _) = self._discoveredPeripherals[peripheralID] else { return }
+            self._handshakeReadinessGate.reset()
             self.connectionStateMachine.resetBackoff()
             self.emitState(.connecting)
             cm.stopScan()
@@ -98,6 +184,16 @@ public final class BLECentralDataSource: NSObject, @unchecked Sendable {
             guard let self, let cm = self._centralManager, let p = self._connectedPeripheral else { return }
             self.emitState(.disconnecting)
             cm.cancelPeripheralConnection(p)
+        }
+    }
+
+    public func completeHandshake(with deviceInfo: DeviceInfo) {
+        bleQueue.async { [weak self] in
+            guard let self else { return }
+            if let peripheral = self._connectedPeripheral {
+                self._discoveredPeripherals[peripheral.identifier] = (peripheral, deviceInfo)
+            }
+            self.emitState(.connected)
         }
     }
 
@@ -145,6 +241,8 @@ public final class BLECentralDataSource: NSObject, @unchecked Sendable {
                     cont.resume(throwing: AppError.deviceNotFound); return
                 }
 
+                let identity = self._pendingCommandCoordinator.register(opcode: command.opCode.rawValue)
+
                 // Register the continuation — the next command/ack/event on notify will resume it.
                 self.commandResponseContinuation = cont
 
@@ -153,13 +251,19 @@ public final class BLECentralDataSource: NSObject, @unchecked Sendable {
                     self._connectedPeripheral!.writeValue(Data(frag), for: self._writeCharacteristic!, type: .withResponse)
                 }
                 HRSenseLogging.debug(.protoCmd, "WRITE(0003) CMD opcode=0x\(String(command.opCode.rawValue, radix: 16)) seq=\(seq) fragments=\(fragments.count)")
-            }
 
-            // Timeout: cancel if no response within timeout window.
-            bleQueue.asyncAfter(deadline: .now() + timeout) { [weak self] in
-                guard let self, let existing = self.commandResponseContinuation else { return }
-                self.commandResponseContinuation = nil
-                existing.resume(throwing: AppError.commandTimeout(opcode: command.opCode.rawValue))
+                // Timeout: cancel only if this exact request is still pending.
+                self.bleQueue.asyncAfter(deadline: .now() + timeout) { [weak self] in
+                    guard let self else { return }
+                    guard self._pendingCommandCoordinator.canTimeout(identity) else {
+                        HRSenseLogging.debug(.protoCmd, "TIMEOUT ignored for stale opcode=0x\(String(identity.opcode, radix: 16)) token=\(identity.token)")
+                        return
+                    }
+                    guard let existing = self.commandResponseContinuation else { return }
+                    self._pendingCommandCoordinator.clear(identity)
+                    self.commandResponseContinuation = nil
+                    existing.resume(throwing: AppError.commandTimeout(opcode: identity.opcode))
+                }
             }
         }
     }
@@ -221,12 +325,14 @@ public final class BLECentralDataSource: NSObject, @unchecked Sendable {
             // Device→App commands (e.g. HELLO_ACK, INFO, ERROR)
             HRSenseLogging.info(.protoCmd, "NOTIFY command opcode=0x\(String(command.opCode.rawValue, radix: 16))")
             if let cont = commandResponseContinuation {
+                _pendingCommandCoordinator.clear()
                 commandResponseContinuation = nil
                 cont.resume(returning: .command(command))
             }
         case .ack(let ack):
             HRSenseLogging.info(.protoCmd, "NOTIFY ack seq=\(ack.seq) opcode=0x\(String(ack.opcode, radix: 16))")
             if let cont = commandResponseContinuation {
+                _pendingCommandCoordinator.clear()
                 commandResponseContinuation = nil
                 cont.resume(returning: .ack(ack))
             }
@@ -255,7 +361,7 @@ extension BLECentralDataSource: CBCentralManagerDelegate {
     }
     public func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral,
                                 advertisementData: [String: Any], rssi RSSI: NSNumber) {
-        let name = advertisementData[CBAdvertisementDataLocalNameKey] as? String ?? peripheral.name ?? "Unknown"
+        let name = advertisementData[CBAdvertisementDataLocalNameKey] as? String ?? peripheral.name ?? "HRSense Peripheral"
         let info = DeviceInfo(peripheralIdentifier: peripheral.identifier, name: name,
                               model: "", firmwareVersion: "", protocolVersion: 0, capabilities: 0)
         _discoveredPeripherals[peripheral.identifier] = (peripheral, info)
@@ -270,7 +376,12 @@ extension BLECentralDataSource: CBCentralManagerDelegate {
         emitState(.disconnected)
     }
     public func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
-        _connectedPeripheral = nil; _notifyCharacteristic = nil; _writeCharacteristic = nil; _otaDataCharacteristic = nil
+        _connectedPeripheral = nil
+        _notifyCharacteristic = nil
+        _writeCharacteristic = nil
+        _otaDataCharacteristic = nil
+        _handshakeReadinessGate.reset()
+        _pendingCommandCoordinator.clear()
         // Cancel any pending command response
         if let cont = commandResponseContinuation {
             commandResponseContinuation = nil
@@ -297,15 +408,36 @@ extension BLECentralDataSource: CBPeripheralDelegate {
         guard error == nil, let chars = service.characteristics else { return }
         for c in chars {
             switch c.uuid {
-            case notifyCharUUID: _notifyCharacteristic = c; peripheral.setNotifyValue(true, for: c)
-            case writeCharUUID: _writeCharacteristic = c
+            case notifyCharUUID:
+                _notifyCharacteristic = c
+                _handshakeReadinessGate.markNotifyCharacteristicDiscovered()
+                peripheral.setNotifyValue(true, for: c)
+            case writeCharUUID:
+                _writeCharacteristic = c
+                _handshakeReadinessGate.markWriteCharacteristicDiscovered()
             case infoCharUUID: peripheral.readValue(for: c)
             case otaDataCharUUID: _otaDataCharacteristic = c
             default: break
             }
         }
-        // Service discovery complete — ready for handshake
-        emitState(.handshaking)
+        HRSenseLogging.info(
+            .state,
+            "BLE characteristics discovered: notify=\(_notifyCharacteristic != nil) write=\(_writeCharacteristic != nil) ota=\(_otaDataCharacteristic != nil)"
+        )
+    }
+
+    public func peripheral(_ peripheral: CBPeripheral, didUpdateNotificationStateFor characteristic: CBCharacteristic, error: Error?) {
+        guard characteristic.uuid == notifyCharUUID else { return }
+
+        if let error {
+            HRSenseLogging.error(.state, "BLE notify subscription failed: \(error.localizedDescription)")
+            return
+        }
+
+        HRSenseLogging.info(.state, "BLE notify subscription updated: isNotifying=\(characteristic.isNotifying)")
+        if _handshakeReadinessGate.updateNotifySubscription(isActive: characteristic.isNotifying) {
+            emitState(.handshaking)
+        }
     }
     public func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
         guard error == nil, let data = characteristic.value, characteristic.uuid == notifyCharUUID else { return }

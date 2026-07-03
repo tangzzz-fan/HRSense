@@ -74,15 +74,7 @@ public final class DeviceRepositoryImpl: DeviceRepository, @unchecked Sendable {
     ///
     /// - Returns: the parsed DeviceInfo from HELLO_ACK.
     public func performHandshake() async throws -> DeviceInfo {
-        // Wait for handshaking state (service discovery complete, characteristics ready)
-        var found = false
-        for await state in connectionStateStream {
-            if state == .handshaking { found = true; break }
-            if state == .disconnected || state == .disconnecting {
-                throw AppError.connectionLost
-            }
-        }
-        guard found else { throw AppError.connectionTimeout }
+        try await waitUntilHandshakeReady(timeout: 5.0)
 
         // Step 1: Send HELLO
         HRSenseLogging.info(.protoCmd, "HANDSHAKE: sending HELLO")
@@ -124,10 +116,13 @@ public final class DeviceRepositoryImpl: DeviceRepository, @unchecked Sendable {
         }
         caps = Capabilities(rawValue: UInt32((ack.params.first(where: { $0.tag == .capabilities })?.value.first) ?? 0) | caps.rawValue)
 
-        // Use the peripheral identifier from the data source
+        let peripheralIdentifier = bleDataSource.connectedPeripheralIdentifier ?? UUID()
+        let connectedDeviceName = bleDataSource.connectedDeviceInfo?.name ?? "HRSense Peripheral"
+
+        // Use the actual peripheral identity from the connected BLE session.
         let deviceInfo = DeviceInfo(
-            peripheralIdentifier: UUID(),  // will be set by connection middleware from discovered device
-            name: "HRSense Device",
+            peripheralIdentifier: peripheralIdentifier,
+            name: connectedDeviceName,
             model: model.isEmpty ? "Unknown" : model,
             firmwareVersion: fw.isEmpty ? "0.0.0" : fw,
             protocolVersion: version,
@@ -143,8 +138,30 @@ public final class DeviceRepositoryImpl: DeviceRepository, @unchecked Sendable {
             Command.startStream(sampleKinds: [DataKind.heartRate.rawValue, DataKind.waveform.rawValue]),
             timeout: 5.0
         )
+        bleDataSource.completeHandshake(with: deviceInfo)
 
         return deviceInfo
+    }
+
+    private func waitUntilHandshakeReady(timeout: TimeInterval) async throws {
+        let deadline = ContinuousClock.now + .seconds(timeout)
+
+        while ContinuousClock.now < deadline {
+            let state = bleDataSource.connectionState
+            switch state {
+            case .handshaking, .connected:
+                HRSenseLogging.info(.state, "HANDSHAKE gate ready: state=\(state)")
+                return
+            case .disconnected, .disconnecting:
+                throw AppError.connectionLost
+            default:
+                break
+            }
+
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+
+        throw AppError.connectionTimeout
     }
 }
 

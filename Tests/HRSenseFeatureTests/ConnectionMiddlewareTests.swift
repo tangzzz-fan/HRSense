@@ -60,6 +60,26 @@ final class ConnectionMiddlewareTests: XCTestCase {
         XCTAssertEqual(store.state.connection, .connecting)
     }
 
+    func test_discoveredDeviceStream_updatesDiscoveredDevicesState() async {
+        let repo = FakeDeviceRepository()
+        let store = makeStore(repo: repo)
+        let deviceID = UUID()
+        let device = DeviceInfo(
+            peripheralIdentifier: deviceID,
+            name: "HRSense Simulator",
+            model: "",
+            firmwareVersion: "",
+            protocolVersion: 0,
+            capabilities: 0
+        )
+
+        store.dispatch(.startScanning)
+        repo.emitDiscoveredDevice(device)
+        try? await Task.sleep(nanoseconds: 200_000_000)
+
+        XCTAssertEqual(store.state.discoveredDevices, [device])
+    }
+
     func test_deviceInfoStream_updatesDeviceInfo() async {
         let repo = FakeDeviceRepository()
         let store = makeStore(repo: repo)
@@ -96,5 +116,16 @@ final class ConnectionMiddlewareTests: XCTestCase {
         store.dispatch(.connect(deviceID: UUID()))
         try? await Task.sleep(nanoseconds: 300_000_000)
         XCTAssertNotNil(store.state.error)
+    }
+
+    func test_successfulHandshake_canAdvanceToConnected() async {
+        let repo = FakeDeviceRepository()
+        repo.emitConnectedAfterHandshake = true
+        let store = makeStore(repo: repo)
+
+        store.dispatch(.connect(deviceID: UUID()))
+        try? await Task.sleep(nanoseconds: 300_000_000)
+
+        XCTAssertEqual(store.state.connection, .connected)
     }
 }

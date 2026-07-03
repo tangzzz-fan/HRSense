@@ -12,6 +12,7 @@ public struct RootView: View {
         ScrollView {
             VStack(spacing: 16) {
                 connectionStatusView
+                discoveredDevicesView
                 deviceInfoView
                 heartRateView
                 inferenceResultView
@@ -50,6 +51,43 @@ public struct RootView: View {
             }
         }
         .padding(.horizontal)
+    }
+
+    // MARK: - Device info
+
+    @ViewBuilder
+    private var discoveredDevicesView: some View {
+        if store.state.connection != .connected && !store.state.discoveredDevices.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Available Devices")
+                    .font(.headline)
+
+                ForEach(store.state.discoveredDevices, id: \.peripheralIdentifier) { device in
+                    HStack(alignment: .center, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(deviceDisplayName(device))
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                            Text(device.peripheralIdentifier.uuidString)
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                                .textSelection(.enabled)
+                        }
+                        Spacer()
+                        Button("Connect") {
+                            store.dispatch(.connect(deviceID: device.peripheralIdentifier))
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(!canConnectToDevice)
+                    }
+                }
+            }
+            .padding()
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.secondary.opacity(0.08))
+            )
+        }
     }
 
     // MARK: - Device info
@@ -181,5 +219,21 @@ public struct RootView: View {
         case .disconnecting: return "Disconnecting..."
         case .disconnected: return "Disconnected"
         }
+    }
+
+    private var canConnectToDevice: Bool {
+        switch store.state.connection {
+        case .idle, .scanning, .disconnected:
+            return true
+        case .connecting, .handshaking, .connected, .disconnecting:
+            return false
+        }
+    }
+
+    private func deviceDisplayName(_ device: DeviceInfo) -> String {
+        if !device.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return device.name
+        }
+        return "HRSense Peripheral"
     }
 }

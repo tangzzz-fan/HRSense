@@ -47,6 +47,22 @@ final class ReducerTests: XCTestCase {
         XCTAssertNil(state.device)
     }
 
+    func test_deviceDiscovered_appendsDevice() {
+        let device = DeviceInfo(peripheralIdentifier: UUID(), name: "Sim", model: "", firmwareVersion: "", protocolVersion: 0, capabilities: 0)
+        var state = AppState()
+        AppReducer.reduce(state: &state, action: .deviceDiscovered(device))
+        XCTAssertEqual(state.discoveredDevices, [device])
+    }
+
+    func test_deviceDiscovered_deduplicatesByPeripheralIdentifier() {
+        let id = UUID()
+        let first = DeviceInfo(peripheralIdentifier: id, name: "Unknown", model: "", firmwareVersion: "", protocolVersion: 0, capabilities: 0)
+        let updated = DeviceInfo(peripheralIdentifier: id, name: "HRSense Simulator", model: "", firmwareVersion: "", protocolVersion: 0, capabilities: 0)
+        var state = AppState(discoveredDevices: [first])
+        AppReducer.reduce(state: &state, action: .deviceDiscovered(updated))
+        XCTAssertEqual(state.discoveredDevices, [updated])
+    }
+
     // MARK: - Heart rate data
 
     func test_heartRateReceived_updatesLiveState() {
@@ -172,6 +188,15 @@ final class ReducerTests: XCTestCase {
         var state = AppState()
         AppReducer.reduce(state: &state, action: .deviceInfoUpdated(device))
         XCTAssertEqual(state.device, device)
+    }
+
+    func test_deviceInfoUpdated_updatesDiscoveredDeviceEntry() {
+        let id = UUID()
+        let discovered = DeviceInfo(peripheralIdentifier: id, name: "HRSense Peripheral", model: "", firmwareVersion: "", protocolVersion: 0, capabilities: 0)
+        let connected = DeviceInfo(peripheralIdentifier: id, name: "HRSense Peripheral", model: "M2", firmwareVersion: "2.0", protocolVersion: 1, capabilities: 0x3)
+        var state = AppState(discoveredDevices: [discovered])
+        AppReducer.reduce(state: &state, action: .deviceInfoUpdated(connected))
+        XCTAssertEqual(state.discoveredDevices, [connected])
     }
 
     // MARK: - Waveform

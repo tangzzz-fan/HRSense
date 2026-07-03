@@ -14,9 +14,9 @@ Use these commands as the default validation entry points:
 swift build          # Root Package.swift with multiple targets
 swift test           # Run all unit tests
 swift test --filter HRSenseProtocolTests  # Run a single test target
-xcodebuild -workspace HRSense.xcworkspace -scheme HRSenseApp \
+nocorrect xcodebuild -workspace HRSense.xcworkspace -scheme HRSenseApp \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' build
-xcodebuild -workspace HRSense.xcworkspace -scheme HRSenseSimulator \
+nocorrect xcodebuild -workspace HRSense.xcworkspace -scheme HRSenseSimulator \
   -destination 'platform=macOS' build
 ```
 

@@ -11,6 +11,26 @@ import HRSenseProtocol
 ///   0005 OTA Data        — App→device firmware image (WriteWithoutResponse)
 public final class SimulatedPeripheral: NSObject, @unchecked Sendable {
 
+    struct ControlWriteRouter {
+        private var assembler = FrameAssembler()
+
+        mutating func process(_ value: Data, commandProcessor: CommandProcessor) -> [(Command, [Data])] {
+            guard value.count >= 2 else { return [] }
+            let seq = value[1]
+            let decoded = assembler.feed(value)
+
+            return decoded.compactMap { frame in
+                guard case let .command(command) = frame else { return nil }
+                let responses = commandProcessor.process(command: command, seq: seq)
+                return (command, responses)
+            }
+        }
+
+        mutating func reset() {
+            assembler.reset()
+        }
+    }
+
     // Synchronization: all mutable state is accessed only on the `bleQueue`.
     private let bleQueue = DispatchQueue(label: "com.hrsense.simulator.ble")
 
@@ -56,6 +76,7 @@ public final class SimulatedPeripheral: NSObject, @unchecked Sendable {
 
     private var _notifyCharacteristic: CBMutableCharacteristic?
     private var _infoCharacteristic: CBMutableCharacteristic?
+    private var controlWriteRouter = ControlWriteRouter()
 
     // MARK: - OTA handler (M6)
 
@@ -180,15 +201,21 @@ public final class SimulatedPeripheral: NSObject, @unchecked Sendable {
     /// Push arbitrary notify fragments over the Data/Notify channel.
     public func pushNotifyFragments(_ fragments: [Data]) {
         bleQueue.async { [weak self] in
-            guard let self,
-                  self._centralSubscribed,
-                  let notifyChar = self._notifyCharacteristic,
-                  let pm = self._peripheralManager
-            else { return }
+            guard let self else { return }
+            guard self._centralSubscribed else {
+                HRSenseLogging.error(.protoCmd, "NOTIFY dropped: no subscribed central")
+                return
+            }
+            guard let notifyChar = self._notifyCharacteristic,
+                  let pm = self._peripheralManager else {
+                HRSenseLogging.error(.protoCmd, "NOTIFY dropped: notify characteristic unavailable")
+                return
+            }
 
             for frag in fragments {
                 guard let data = self.faultInjector.apply(frag) else { continue }
-                pm.updateValue(data, for: notifyChar, onSubscribedCentrals: nil)
+                let didQueue = pm.updateValue(data, for: notifyChar, onSubscribedCentrals: nil)
+                HRSenseLogging.info(.protoCmd, "NOTIFY queued len=\(data.count) success=\(didQueue)")
             }
         }
     }
@@ -210,6 +237,7 @@ extension SimulatedPeripheral: CBPeripheralManagerDelegate {
         _centralSubscribed = true
         _deviceState = .connected
         commandProcessor.didConnect()
+        HRSenseLogging.info(.state, "Central subscribed to notify characteristic: \(characteristic.uuid.uuidString)")
         onStateChanged?(_deviceState)
     }
 
@@ -218,6 +246,7 @@ extension SimulatedPeripheral: CBPeripheralManagerDelegate {
                                    didUnsubscribeFrom characteristic: CBCharacteristic) {
         _centralSubscribed = false
         commandProcessor.didDisconnect()
+        controlWriteRouter.reset()
         _deviceState = .advertising
         onStateChanged?(_deviceState)
     }
@@ -242,15 +271,12 @@ extension SimulatedPeripheral: CBPeripheralManagerDelegate {
                 continue
             }
 
-            let assembler = FrameAssembler()
-            let decoded = assembler.feed(value)
-            for frame in decoded {
-                if case let .command(cmd) = frame {
-                    let responses = commandProcessor.process(command: cmd, seq: 0)
-                    onCommandReceived?(responses)
-                    if !responses.isEmpty {
-                        pushResponse(responses)
-                    }
+            let routedCommands = controlWriteRouter.process(value, commandProcessor: commandProcessor)
+            for (command, responses) in routedCommands {
+                HRSenseLogging.info(.protoCmd, "WRITE(0003) decoded opcode=0x\(String(command.opCode.rawValue, radix: 16))")
+                onCommandReceived?(responses)
+                if !responses.isEmpty {
+                    pushResponse(responses)
                 }
             }
 

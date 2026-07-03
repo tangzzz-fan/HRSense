@@ -17,12 +17,17 @@ public enum AppReducer {
         switch action {
         case .startScanning:
             state.connection = .scanning
+            state.discoveredDevices = []
 
         case .stopScanning:
             state.connection = .idle
 
-        case .deviceDiscovered:
-            break // Handled by middleware — no state change needed at reducer level
+        case .deviceDiscovered(let device):
+            if let index = state.discoveredDevices.firstIndex(where: { $0.peripheralIdentifier == device.peripheralIdentifier }) {
+                state.discoveredDevices[index] = device
+            } else {
+                state.discoveredDevices.append(device)
+            }
 
         case .connect:
             state.connection = .connecting
@@ -42,6 +47,11 @@ public enum AppReducer {
 
         case .deviceInfoUpdated(let info):
             state.device = info
+            if let index = state.discoveredDevices.firstIndex(where: { $0.peripheralIdentifier == info.peripheralIdentifier }) {
+                state.discoveredDevices[index] = info
+            } else {
+                state.discoveredDevices.append(info)
+            }
 
         case .heartRateReceived(let samples):
             state.live.recentSamples.append(contentsOf: samples)

@@ -5,6 +5,8 @@ import HRSenseCore
 public struct AppState: Equatable, Sendable {
     /// BLE connection status.
     public var connection: ConnectionState
+    /// Discovered BLE devices available for connection.
+    public var discoveredDevices: [DeviceInfo]
     /// Info about the currently connected device.
     public var device: DeviceInfo?
     /// Live sensor data.
@@ -22,6 +24,7 @@ public struct AppState: Equatable, Sendable {
 
     public init(
         connection: ConnectionState = .idle,
+        discoveredDevices: [DeviceInfo] = [],
         device: DeviceInfo? = nil,
         live: LiveState = LiveState(),
         metrics: MetricsState = MetricsState(),
@@ -31,6 +34,7 @@ public struct AppState: Equatable, Sendable {
         error: AppError? = nil
     ) {
         self.connection = connection
+        self.discoveredDevices = discoveredDevices
         self.device = device
         self.live = live
         self.metrics = metrics
