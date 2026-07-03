@@ -109,6 +109,10 @@ public final class SimulatedPeripheral: NSObject, @unchecked Sendable {
             onStreamStart: onStreamStart,
             onStreamStop: onStreamStop
         )
+        self.otaEventHandler = OTAEventHandler(
+            stateMachine: OTAStateMachine(currentVersion: config.firmwareVersion),
+            mtu: config.mtu
+        )
 
         super.init()
 
@@ -219,6 +223,11 @@ public final class SimulatedPeripheral: NSObject, @unchecked Sendable {
             }
         }
     }
+
+    private func pushOTAResponses(_ commands: [OTACommand]) {
+        let fragments = commands.map { Data(OTACodec.encode($0)) }
+        pushNotifyFragments(fragments)
+    }
 }
 
 // MARK: - CBPeripheralManagerDelegate
@@ -258,9 +267,10 @@ extension SimulatedPeripheral: CBPeripheralManagerDelegate {
             if request.characteristic.uuid == otaDataCharUUID, let value = request.value {
                 // OTA image chunk received via dedicated high-throughput channel
                 HRSenseLogging.debug(.ota, "OTA_WRITE(0005) received: len=\(value.count)")
-                // OTA data is handled by the OTARepositoryImpl on the App side;
-                // on the device side (simulator), OTA data chunks are processed
-                // by OTAEventHandler.receiveOTAChunk when called from the command processor
+                if let responses = otaEventHandler?.receiveOTAChunk(packet: [UInt8](value)),
+                   !responses.isEmpty {
+                    pushOTAResponses(responses)
+                }
                 peripheral.respond(to: request, withResult: .success)
                 continue
             }
@@ -272,15 +282,29 @@ extension SimulatedPeripheral: CBPeripheralManagerDelegate {
             }
 
             let routedCommands = controlWriteRouter.process(value, commandProcessor: commandProcessor)
-            for (command, responses) in routedCommands {
-                HRSenseLogging.info(.protoCmd, "WRITE(0003) decoded opcode=0x\(String(command.opCode.rawValue, radix: 16))")
-                onCommandReceived?(responses)
-                if !responses.isEmpty {
-                    pushResponse(responses)
+            if !routedCommands.isEmpty {
+                for (command, responses) in routedCommands {
+                    HRSenseLogging.info(.protoCmd, "WRITE(0003) decoded opcode=0x\(String(command.opCode.rawValue, radix: 16))")
+                    onCommandReceived?(responses)
+                    if !responses.isEmpty {
+                        pushResponse(responses)
+                    }
                 }
+                peripheral.respond(to: request, withResult: .success)
+                continue
             }
 
-            peripheral.respond(to: request, withResult: .success)
+            if let otaCommand = OTACodec.decode(body: [UInt8](value)) {
+                HRSenseLogging.info(.ota, "WRITE(0003) OTA opcode=0x\(String(otaCommand.opCode.rawValue, radix: 16))")
+                let responses = otaEventHandler?.handle(command: otaCommand) ?? []
+                if !responses.isEmpty {
+                    pushOTAResponses(responses)
+                }
+                peripheral.respond(to: request, withResult: .success)
+                continue
+            }
+
+            peripheral.respond(to: request, withResult: .requestNotSupported)
         }
     }
 

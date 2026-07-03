@@ -106,6 +106,8 @@ public final class BLECentralDataSource: NSObject, @unchecked Sendable {
     private var discoveredDevicesContinuation: AsyncStream<DeviceInfo>.Continuation?
     private var heartRateContinuation: AsyncStream<HeartRateSample>.Continuation?
     private var commandResponseContinuation: CheckedContinuation<DecodedFrame, Error>?
+    private var otaResponseContinuation: CheckedContinuation<OTACommand, Error>?
+    private var expectedOTAResponseOpCodes: Set<OTAOpCode> = []
 
     public let connectionStateStream: AsyncStream<ConnectionState>
     public let discoveredDevicesStream: AsyncStream<DeviceInfo>
@@ -268,6 +270,87 @@ public final class BLECentralDataSource: NSObject, @unchecked Sendable {
         }
     }
 
+    // MARK: - OTA control (0003 Control, raw OTA command body)
+
+    /// Send a raw OTA control command via Control/Write (0003) without waiting
+    /// for a notify response. Used by OTA_WINDOW_BEGIN, whose response arrives
+    /// later only after the OTA data chunk is written on 0005.
+    public func sendOTAControl(_ command: OTACommand) async throws {
+        let payload = Data(OTACodec.encode(command))
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            bleQueue.async { [weak self] in
+                guard let self else { continuation.resume(throwing: AppError.connectionLost); return }
+                guard let peripheral = self._connectedPeripheral,
+                      let writeChar = self._writeCharacteristic else {
+                    continuation.resume(throwing: AppError.deviceNotFound); return
+                }
+                HRSenseLogging.debug(.ota, "WRITE(0003) OTA opcode=0x\(String(command.opCode.rawValue, radix: 16)) len=\(payload.count)")
+                peripheral.writeValue(payload, for: writeChar, type: .withResponse)
+                continuation.resume()
+            }
+        }
+    }
+
+    /// Send a raw OTA control command via Control/Write (0003) and wait for the
+    /// matching notify response on the Data/Notify (0002) channel.
+    public func sendOTAControlAndWait(_ command: OTACommand, timeout: TimeInterval = 5.0) async throws -> OTACommand {
+        let expectedOpCode = otaResponseOpCode(for: command.opCode)
+        let payload = Data(OTACodec.encode(command))
+
+        return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<OTACommand, Error>) in
+            bleQueue.async { [weak self] in
+                guard let self else { continuation.resume(throwing: AppError.connectionLost); return }
+                guard let peripheral = self._connectedPeripheral,
+                      let writeChar = self._writeCharacteristic else {
+                    continuation.resume(throwing: AppError.deviceNotFound); return
+                }
+                guard let expectedOpCode else {
+                    continuation.resume(throwing: AppError.protocolError(detail: "Unsupported OTA response mapping"))
+                    return
+                }
+
+                self.otaResponseContinuation = continuation
+                self.expectedOTAResponseOpCodes = [expectedOpCode]
+
+                HRSenseLogging.debug(.ota, "WRITE(0003) OTA opcode=0x\(String(command.opCode.rawValue, radix: 16)) wait=0x\(String(expectedOpCode.rawValue, radix: 16))")
+                peripheral.writeValue(payload, for: writeChar, type: .withResponse)
+
+                self.bleQueue.asyncAfter(deadline: .now() + timeout) { [weak self] in
+                    guard let self else { return }
+                    guard let pending = self.otaResponseContinuation else { return }
+                    guard !self.expectedOTAResponseOpCodes.isEmpty else { return }
+                    self.otaResponseContinuation = nil
+                    self.expectedOTAResponseOpCodes = []
+                    pending.resume(throwing: AppError.commandTimeout(opcode: command.opCode.rawValue))
+                }
+            }
+        }
+    }
+
+    /// Wait for the next OTA_WINDOW_ACK arriving on the notify channel.
+    public func waitForOTAWindowAck(timeout: TimeInterval = 5.0) async throws -> OTACommand {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<OTACommand, Error>) in
+            bleQueue.async { [weak self] in
+                guard let self else { continuation.resume(throwing: AppError.connectionLost); return }
+                guard self._connectedPeripheral != nil, self._notifyCharacteristic != nil else {
+                    continuation.resume(throwing: AppError.deviceNotFound); return
+                }
+
+                self.otaResponseContinuation = continuation
+                self.expectedOTAResponseOpCodes = [.otaWindowAck]
+
+                self.bleQueue.asyncAfter(deadline: .now() + timeout) { [weak self] in
+                    guard let self else { return }
+                    guard let pending = self.otaResponseContinuation else { return }
+                    guard self.expectedOTAResponseOpCodes == [.otaWindowAck] else { return }
+                    self.otaResponseContinuation = nil
+                    self.expectedOTAResponseOpCodes = []
+                    pending.resume(throwing: AppError.commandTimeout(opcode: OTAOpCode.otaWindowAck.rawValue))
+                }
+            }
+        }
+    }
+
     /// Rolling frame sequence number (0–255).
     private var _seq: UInt8 = 0
     private func nextSeq() -> UInt8 {
@@ -311,9 +394,27 @@ public final class BLECentralDataSource: NSObject, @unchecked Sendable {
     private func handleNotifyData(_ data: Data) {
         metricsCollector.recordBytesReceived(data.count)
         HRSenseLogging.debug(.bleRaw, HexFormat.canonicalHexDump(data))
+        if let otaCommand = decodeRawOTANotify(data) {
+            consume(otaCommand: otaCommand)
+            return
+        }
         for frame in frameAssembler.feed(data) {
             consume(frame: frame, receivedBytes: data.count)
         }
+    }
+
+    private func decodeRawOTANotify(_ data: Data) -> OTACommand? {
+        let bytes = [UInt8](data)
+        guard bytes.count >= 2,
+              let opCode = OTAOpCode(rawValue: bytes[0]),
+              bytes.count == Int(bytes[1]) + 2 else {
+            return nil
+        }
+        guard let command = OTACodec.decode(body: bytes),
+              command.opCode == opCode else {
+            return nil
+        }
+        return command
     }
 
     func consume(frame: DecodedFrame, receivedBytes: Int) {
@@ -351,6 +452,29 @@ public final class BLECentralDataSource: NSObject, @unchecked Sendable {
             }
         }
     }
+
+    private func consume(otaCommand: OTACommand) {
+        HRSenseLogging.info(.ota, "NOTIFY OTA opcode=0x\(String(otaCommand.opCode.rawValue, radix: 16))")
+        if expectedOTAResponseOpCodes.contains(otaCommand.opCode),
+           let continuation = otaResponseContinuation {
+            otaResponseContinuation = nil
+            expectedOTAResponseOpCodes = []
+            continuation.resume(returning: otaCommand)
+        }
+    }
+
+    private func otaResponseOpCode(for requestOpCode: OTAOpCode) -> OTAOpCode? {
+        switch requestOpCode {
+        case .otaStart:
+            return .otaStartAck
+        case .otaValidate:
+            return .otaValidateResult
+        case .otaApply:
+            return .otaApply
+        case .otaWindowBegin, .otaStartAck, .otaWindowAck, .otaValidateResult, .otaAbort:
+            return nil
+        }
+    }
 }
 
 // MARK: - CBCentralManagerDelegate
@@ -386,6 +510,11 @@ extension BLECentralDataSource: CBCentralManagerDelegate {
         if let cont = commandResponseContinuation {
             commandResponseContinuation = nil
             cont.resume(throwing: AppError.connectionLost)
+        }
+        if let otaCont = otaResponseContinuation {
+            otaResponseContinuation = nil
+            expectedOTAResponseOpCodes = []
+            otaCont.resume(throwing: AppError.connectionLost)
         }
         // Reset frame assembler and data parser for the next connection
         frameAssembler.reset()

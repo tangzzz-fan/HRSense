@@ -11,6 +11,12 @@ public final class OTAEventHandler: @unchecked Sendable {
     private var imageBuffer: OTAImageBuffer?
     private let mtu: Int
     private var lastTransferredCRC32: UInt32?
+    private var pendingWindow: PendingWindow?
+
+    private struct PendingWindow: Equatable {
+        let offset: Int
+        let size: Int
+    }
 
     public var onRebootNeeded: (() -> Void)?
 
@@ -37,19 +43,41 @@ public final class OTAEventHandler: @unchecked Sendable {
         }
     }
 
-    /// Receive raw OTA image data via OTA Data (0005).
-    /// Data is accumulated into the image buffer.
-    /// - Returns: true if data was accepted.
-    @discardableResult
-    public func receiveOTAChunk(offset: Int, data: [UInt8]) -> Bool {
+    /// Receive a raw OTA packet via OTA Data (0005).
+    ///
+    /// Packet format: `offset(u32 LE) + payload`.
+    /// Returns OTA_WINDOW_ACK responses that should be sent on the notify channel.
+    public func receiveOTAChunk(packet: [UInt8]) -> [OTACommand] {
+        guard packet.count >= 4 else {
+            HRSenseLogging.error(.ota, "OTA chunk rejected: packet too short")
+            return [OTACommand.otaWindowAck(status: .invalidImage, offset: 0)]
+        }
         guard stateMachine.state == .transferring,
               let buf = imageBuffer,
-              buf.write(offset: offset, data: data) else {
-            HRSenseLogging.error(.ota, "OTA chunk rejected: offset=\(offset) state=\(stateMachine.state)")
-            return false
+              let window = pendingWindow else {
+            HRSenseLogging.error(.ota, "OTA chunk rejected: no pending window state=\(stateMachine.state)")
+            return [OTACommand.otaWindowAck(status: .windowOutOfOrder, offset: 0)]
         }
+
+        let offset = Int(UInt32(packet[0]) | (UInt32(packet[1]) << 8) |
+                         (UInt32(packet[2]) << 16) | (UInt32(packet[3]) << 24))
+        let data = Array(packet.dropFirst(4))
+
+        guard offset == window.offset, data.count == window.size else {
+            HRSenseLogging.error(.ota, "OTA chunk rejected: expected offset=\(window.offset) size=\(window.size), got offset=\(offset) size=\(data.count)")
+            pendingWindow = nil
+            return [OTACommand.otaWindowAck(status: .windowOutOfOrder, offset: UInt32(buf.resumeOffset))]
+        }
+
+        guard buf.write(offset: offset, data: data) else {
+            HRSenseLogging.error(.ota, "OTA chunk rejected: write failed at offset=\(offset)")
+            pendingWindow = nil
+            return [OTACommand.otaWindowAck(status: .invalidImage, offset: UInt32(buf.resumeOffset))]
+        }
+
+        pendingWindow = nil
         HRSenseLogging.debug(.ota, "OTA chunk accepted: offset=\(offset) size=\(data.count) progress=\(String(format: "%.1f%%", buf.progress * 100))")
-        return true
+        return [OTACommand.otaWindowAck(status: .success, offset: UInt32(buf.resumeOffset))]
     }
 
     // MARK: - Private handlers
@@ -87,6 +115,7 @@ public final class OTAEventHandler: @unchecked Sendable {
         }
 
         lastTransferredCRC32 = imageCRC32
+        pendingWindow = nil
         stateMachine.handle(.startReceived(imageSize: imageSize, imageCRC32: imageCRC32, newVersion: newVersion))
         stateMachine.handle(.windowTransferComplete)
 
@@ -104,15 +133,16 @@ public final class OTAEventHandler: @unchecked Sendable {
         let offset = Int(UInt32(cmd.payload[0]) | (UInt32(cmd.payload[1]) << 8) |
                          (UInt32(cmd.payload[2]) << 16) | (UInt32(cmd.payload[3]) << 24))
         let size = Int(UInt16(cmd.payload[4]) | (UInt16(cmd.payload[5]) << 8))
-        let data = Array(cmd.payload.dropFirst(6).prefix(size))
 
-        guard buf.write(offset: offset, data: data) else {
-            HRSenseLogging.error(.ota, "OTA_WINDOW write failed: offset=\(offset)")
-            return [OTACommand.otaWindowAck(status: .windowOutOfOrder, offset: 0)]
+        guard offset == buf.resumeOffset else {
+            HRSenseLogging.error(.ota, "OTA_WINDOW out of order: expected offset=\(buf.resumeOffset) got=\(offset)")
+            pendingWindow = nil
+            return [OTACommand.otaWindowAck(status: .windowOutOfOrder, offset: UInt32(buf.resumeOffset))]
         }
 
-        HRSenseLogging.debug(.ota, "OTA_WINDOW written: offset=\(offset) bytes=\(data.count) progress=\(String(format: "%.1f%%", buf.progress * 100))")
-        return [OTACommand.otaWindowAck(status: .success, offset: UInt32(buf.resumeOffset))]
+        pendingWindow = PendingWindow(offset: offset, size: size)
+        HRSenseLogging.debug(.ota, "OTA_WINDOW_BEGIN accepted: offset=\(offset) size=\(size)")
+        return []
     }
 
     private func handleValidate(_ cmd: OTACommand) -> [OTACommand] {
@@ -162,6 +192,7 @@ public final class OTAEventHandler: @unchecked Sendable {
         HRSenseLogging.info(.ota, "OTA_ABORT received")
         stateMachine.handle(.abortReceived)
         imageBuffer = nil
+        pendingWindow = nil
         return [OTACommand(opCode: .otaAbort, payload: [OTAStatusCode.success.rawValue])]
     }
 }

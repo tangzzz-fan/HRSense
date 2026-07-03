@@ -14,7 +14,9 @@ import HRSenseProtocol
 /// Resume: if the previous transfer was interrupted, App can resume from
 /// `resumeOffset` if the imageCRC32 matches the previously transferred image.
 public final class OTARepositoryImpl: OTARepository, @unchecked Sendable {
-    private let sendCommand: (UInt8, Data) async throws -> Data
+    private let sendOTAControl: (OTACommand) async throws -> Void
+    private let sendOTAControlAndWait: (OTACommand, TimeInterval) async throws -> OTACommand
+    private let waitForOTAWindowAck: (TimeInterval) async throws -> OTACommand
     private let sendOTAChunk: (Data) -> Void
     private let imageData: () -> Data
 
@@ -30,11 +32,15 @@ public final class OTARepositoryImpl: OTARepository, @unchecked Sendable {
     public let progressStream: AsyncStream<OTAProgress>
 
     public init(
-        sendCommand: @escaping (UInt8, Data) async throws -> Data,
+        sendOTAControl: @escaping (OTACommand) async throws -> Void,
+        sendOTAControlAndWait: @escaping (OTACommand, TimeInterval) async throws -> OTACommand,
+        waitForOTAWindowAck: @escaping (TimeInterval) async throws -> OTACommand,
         sendOTAChunk: @escaping (Data) -> Void,
         imageData: @escaping () -> Data
     ) {
-        self.sendCommand = sendCommand
+        self.sendOTAControl = sendOTAControl
+        self.sendOTAControlAndWait = sendOTAControlAndWait
+        self.waitForOTAWindowAck = waitForOTAWindowAck
         self.sendOTAChunk = sendOTAChunk
         self.imageData = imageData
         var cont: AsyncStream<OTAProgress>.Continuation!
@@ -54,11 +60,9 @@ public final class OTARepositoryImpl: OTARepository, @unchecked Sendable {
 
         // Step 1: OTA_START (via Control 0003)
         let startCmd = OTACommand.otaStart(imageSize: UInt32(fullImage.count), imageCRC32: computedCRC, newVersion: image.newVersion)
-        let startPayload = Data(OTACodec.encode(startCmd))
-        let startResponseData = try await sendCommand(startCmd.opCode.rawValue, startPayload)
+        let startResp = try await sendOTAControlAndWait(startCmd, 5.0)
 
-        guard let startResp = OTACodec.decode(body: [UInt8](startResponseData)),
-              startResp.opCode == .otaStartAck,
+        guard startResp.opCode == .otaStartAck,
               let statusByte = startResp.payload.first
         else {
             HRSenseLogging.error(.ota, "OTA_START rejected: invalid response")
@@ -73,9 +77,9 @@ public final class OTARepositoryImpl: OTARepository, @unchecked Sendable {
         }
 
         // Parse resumeOffset from response (if device has partial image with matching CRC)
-        if startResp.payload.count >= 6 {
-            let resumeOff = Int(UInt32(startResp.payload[2]) | (UInt32(startResp.payload[3]) << 8) |
-                               (UInt32(startResp.payload[4]) << 16) | (UInt32(startResp.payload[5]) << 24))
+        if startResp.payload.count >= 5 {
+            let resumeOff = Int(UInt32(startResp.payload[1]) | (UInt32(startResp.payload[2]) << 8) |
+                               (UInt32(startResp.payload[3]) << 16) | (UInt32(startResp.payload[4]) << 24))
             lastResumeOffset = resumeOff
             HRSenseLogging.info(.ota, "Device resumeOffset=\(resumeOff)")
         }
@@ -106,32 +110,26 @@ public final class OTARepositoryImpl: OTARepository, @unchecked Sendable {
 
             // Send window begin command on Control (0003)
             let windowCmd = OTACommand.otaWindowBegin(offset: UInt32(offset), size: UInt16(chunk.count))
-            let windowCmdPayload = Data(OTACodec.encode(windowCmd))
-            _ = try await sendCommand(windowCmd.opCode.rawValue, windowCmdPayload)
+            try await sendOTAControl(windowCmd)
 
             HRSenseLogging.debug(.ota, "OTA_WINDOW_BEGIN offset=\(offset) size=\(chunk.count)")
 
             var windowOK = false
             for attempt in 1...maxRetries where !windowOK && !shouldAbort {
                 // Send chunk via dedicated OTA Data channel (0005, Write Without Response)
-                sendOTAChunk(Data(chunk))
+                sendOTAChunk(encodeChunkPacket(offset: offset, chunk: chunk))
 
                 HRSenseLogging.debug(.ota, "OTA chunk sent offset=\(offset) attempt=\(attempt)/\(maxRetries)")
 
-                // Wait for OTA_WINDOW_ACK via notify (flow control)
-                // The response comes back through the notify stream which the
-                // DeviceRepositoryImpl routes. For the window ACK, we simulate
-                // synchronous-style flow by waiting via the command channel.
-                // In a real implementation, a dedicated semaphore or continuation
-                // would gate each window on the ACK from the notify path.
-                //
-                // Window accepted if no error thrown (device ACKs via notify).
-                // Retry on timeout or explicit NAK.
-
-                // Simulated wait for window ACK — real implementation uses
-                // notify callback to gate continuation.
-                try? await Task.sleep(nanoseconds: 50_000_000)  // 50ms inter-window
-                windowOK = true
+                do {
+                    let ack = try await waitForOTAWindowAck(2.0)
+                    windowOK = isAcceptedWindowAck(ack, expectedOffset: windowEnd)
+                    if !windowOK {
+                        HRSenseLogging.error(.ota, "OTA_WINDOW_ACK rejected offset=\(offset) attempt=\(attempt)")
+                    }
+                } catch {
+                    HRSenseLogging.error(.ota, "OTA_WINDOW_ACK timeout/error offset=\(offset) attempt=\(attempt): \(error.localizedDescription)")
+                }
             }
 
             if !windowOK {
@@ -158,12 +156,10 @@ public final class OTARepositoryImpl: OTARepository, @unchecked Sendable {
         emit(.validating)
 
         let validateCmd = OTACommand.otaValidate(expectedCRC32: computedCRC)
-        let validatePayload = Data(OTACodec.encode(validateCmd))
-        let validateResp = try await sendCommand(validateCmd.opCode.rawValue, validatePayload)
+        let validateResp = try await sendOTAControlAndWait(validateCmd, 5.0)
 
-        guard let vr = OTACodec.decode(body: [UInt8](validateResp)),
-              vr.opCode == .otaValidateResult,
-              let vStatus = vr.payload.first,
+        guard validateResp.opCode == .otaValidateResult,
+              let vStatus = validateResp.payload.first,
               vStatus == OTAStatusCode.success.rawValue
         else {
             HRSenseLogging.error(.ota, "Validation failed — CRC mismatch or image corrupt")
@@ -176,8 +172,7 @@ public final class OTARepositoryImpl: OTARepository, @unchecked Sendable {
         emit(.applying)
 
         let applyCmd = OTACommand.otaApply()
-        let applyPayload = Data(OTACodec.encode(applyCmd))
-        _ = try await sendCommand(applyCmd.opCode.rawValue, applyPayload)
+        _ = try await sendOTAControlAndWait(applyCmd, 5.0)
 
         HRSenseLogging.info(.ota, "OTA complete — new version=\(image.newVersion)")
         emit(.completed(newVersion: image.newVersion))
@@ -206,5 +201,30 @@ public final class OTARepositoryImpl: OTARepository, @unchecked Sendable {
             totalBytes: 0
         )
         progressContinuation?.yield(p)
+    }
+
+    private func encodeChunkPacket(offset: Int, chunk: Data) -> Data {
+        var packet = Data()
+        var littleEndianOffset = UInt32(offset).littleEndian
+        withUnsafeBytes(of: &littleEndianOffset) { packet.append(contentsOf: $0) }
+        packet.append(chunk)
+        return packet
+    }
+
+    private func isAcceptedWindowAck(_ ack: OTACommand, expectedOffset: Int) -> Bool {
+        guard ack.opCode == .otaWindowAck,
+              ack.payload.count >= 5,
+              let status = OTAStatusCode(rawValue: ack.payload[0]) else {
+            return false
+        }
+
+        let acknowledgedOffset = Int(
+            UInt32(ack.payload[1]) |
+            (UInt32(ack.payload[2]) << 8) |
+            (UInt32(ack.payload[3]) << 16) |
+            (UInt32(ack.payload[4]) << 24)
+        )
+        HRSenseLogging.debug(.ota, "OTA_WINDOW_ACK status=\(status) recvOffset=\(acknowledgedOffset)")
+        return status == .success && acknowledgedOffset == expectedOffset
     }
 }
