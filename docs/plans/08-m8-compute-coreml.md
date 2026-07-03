@@ -157,7 +157,7 @@ case inferenceCompleted(InferenceResult)
 - [ ] C++ 黄金值对拍：RMSSD/SDNN 误差 <1%，频域 <5%
 - [ ] 特征输出 14 维，契约版本匹配
 - [ ] 占位模型端到端：特征 → predict → InferenceResult → State → UI
-- [ ] 5min 窗 / 30s 步长触发正确
+- [ ] 5min 窗 / 10s 步长触发正确
 - [ ] 推理耗时记录
 
 ## 预估文件数：~20 个新文件 + ~8 个测试文件

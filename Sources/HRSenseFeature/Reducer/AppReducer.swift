@@ -112,11 +112,19 @@ public enum AppReducer {
             state.ota = ota
 
         case .waveformSamplesReceived(let samples):
-            state.waveform.ecgSamples.append(contentsOf: samples)
+            let ecgSamples = samples.filter { $0.type == .ecg }
+            let ppgSamples = samples.filter { $0.type == .ppg }
+
+            state.waveform.ecgSamples.append(contentsOf: ecgSamples)
+            state.waveform.ppgSamples.append(contentsOf: ppgSamples)
+
             // Keep bounded to last 7680 samples (~60s @ 128 Hz)
             let maxSamples = 7680
             if state.waveform.ecgSamples.count > maxSamples {
                 state.waveform.ecgSamples = Array(state.waveform.ecgSamples.suffix(maxSamples))
+            }
+            if state.waveform.ppgSamples.count > maxSamples {
+                state.waveform.ppgSamples = Array(state.waveform.ppgSamples.suffix(maxSamples))
             }
             state.waveform.isStreaming = true
 

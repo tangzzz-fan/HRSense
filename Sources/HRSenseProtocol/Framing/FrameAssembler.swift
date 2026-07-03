@@ -10,9 +10,10 @@ public final class FrameAssembler: @unchecked Sendable {
     /// malicious/malformed fragments. 64 KiB is generous for BLE frames.
     private static let maxFrameSize = 64 * 1024
 
-    /// Track recent seq numbers to detect and drop duplicates.
-    /// Ring of 256 bits — enough to track which of the last 256 seqs we've seen.
-    private var seenSeqs: Set<UInt8> = []
+    /// Track recently-completed frame identities to detect retransmitted duplicates
+    /// without conflating different payload types that happen to reuse the same seq.
+    private var seenFrameIdentities: Set<SeenFrameIdentity> = []
+    private var seenFrameOrder: [SeenFrameIdentity] = []
 
     /// Currently in-progress partial frame (per seq).
     /// Keyed by seq; value is the list of fragments received so far (for multi-fragment frames).
@@ -21,6 +22,8 @@ public final class FrameAssembler: @unchecked Sendable {
     /// Maximum distinct seq slots before we start evicting the oldest.
     /// Realistic BLE throughput: 10–100 frames/s; 16 slots covers several seconds of backlog.
     private static let maxPartialSlots = 16
+    private static let maxSeenFrames = 256
+    private static let duplicatePrefixLength = 16
 
     private struct PartialFrame {
         let totalFragments: Int?  // nil if unknown (last fragment not yet received)
@@ -42,6 +45,12 @@ public final class FrameAssembler: @unchecked Sendable {
                 rawPayload: self.rawPayload + frag
             )
         }
+    }
+
+    private struct SeenFrameIdentity: Hashable {
+        let seq: UInt8
+        let payloadCount: Int
+        let payloadPrefix: [UInt8]
     }
 
     public init() {}
@@ -67,16 +76,19 @@ public final class FrameAssembler: @unchecked Sendable {
         let seq = bytes[1]
         let payload = Array(bytes.dropFirst(2))
 
-        // Duplicate detection: if this is a single-fragment frame and we've seen this seq, drop
-        if hdr.isSingleFragment && seenSeqs.contains(seq) {
+        let frameIdentity = makeSeenFrameIdentity(seq: seq, payload: payload)
+
+        // Duplicate detection: only drop when the same seq and same frame signature
+        // are seen again. Different frame kinds may legitimately reuse the same seq.
+        if hdr.isSingleFragment, let frameIdentity, seenFrameIdentities.contains(frameIdentity) {
             return []
         }
 
         // For single-fragment frames, no reassembly needed — just one fragment is the whole frame
         if hdr.isSingleFragment {
-            seenSeqs.insert(seq)
-            // Evict old seqs to prevent unbounded growth
-            if seenSeqs.count > 256 { seenSeqs.removeFirst() }
+            if let frameIdentity {
+                recordSeenFrameIdentity(frameIdentity)
+            }
             return decodeFullFrame(payload).map { [$0] } ?? []
         }
 
@@ -113,8 +125,9 @@ public final class FrameAssembler: @unchecked Sendable {
                 return []
             }
 
-            seenSeqs.insert(seq)
-            if seenSeqs.count > 256 { seenSeqs.removeFirst() }
+            if let frameIdentity = makeSeenFrameIdentity(seq: seq, payload: fullPayload) {
+                recordSeenFrameIdentity(frameIdentity)
+            }
 
             return decodeFullFrame(fullPayload).map { [$0] } ?? []
         } else {
@@ -171,9 +184,28 @@ public final class FrameAssembler: @unchecked Sendable {
         }
     }
 
+    private func makeSeenFrameIdentity(seq: UInt8, payload: [UInt8]) -> SeenFrameIdentity? {
+        guard !payload.isEmpty else { return nil }
+        return SeenFrameIdentity(
+            seq: seq,
+            payloadCount: payload.count,
+            payloadPrefix: Array(payload.prefix(Self.duplicatePrefixLength))
+        )
+    }
+
+    private func recordSeenFrameIdentity(_ identity: SeenFrameIdentity) {
+        guard seenFrameIdentities.insert(identity).inserted else { return }
+        seenFrameOrder.append(identity)
+        if seenFrameOrder.count > Self.maxSeenFrames {
+            let oldest = seenFrameOrder.removeFirst()
+            seenFrameIdentities.remove(oldest)
+        }
+    }
+
     /// Reset assembler state (e.g., on disconnect).
     public func reset() {
-        seenSeqs.removeAll()
+        seenFrameIdentities.removeAll()
+        seenFrameOrder.removeAll()
         partialFrames.removeAll()
     }
 }

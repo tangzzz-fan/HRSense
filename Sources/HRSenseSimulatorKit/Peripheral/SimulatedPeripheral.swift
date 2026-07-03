@@ -2,6 +2,65 @@ import Foundation
 import CoreBluetooth
 import HRSenseProtocol
 
+enum NotifyPayloadPriority: String, Equatable {
+    case high
+    case normal
+}
+
+struct PendingNotifyPayload: Equatable {
+    let data: Data
+    let priority: NotifyPayloadPriority
+    let source: String
+}
+
+struct NotifyBackpressureBuffer {
+    private var highPriorityPayloads: [PendingNotifyPayload] = []
+    private var normalPriorityPayloads: [PendingNotifyPayload] = []
+
+    var count: Int {
+        highPriorityPayloads.count + normalPriorityPayloads.count
+    }
+
+    var isEmpty: Bool {
+        count == 0
+    }
+
+    mutating func enqueue(_ payloads: [PendingNotifyPayload]) {
+        for payload in payloads {
+            switch payload.priority {
+            case .high:
+                highPriorityPayloads.append(payload)
+            case .normal:
+                normalPriorityPayloads.append(payload)
+            }
+        }
+    }
+
+    mutating func prepend(_ payload: PendingNotifyPayload) {
+        switch payload.priority {
+        case .high:
+            highPriorityPayloads.insert(payload, at: 0)
+        case .normal:
+            normalPriorityPayloads.insert(payload, at: 0)
+        }
+    }
+
+    mutating func popNext() -> PendingNotifyPayload? {
+        if !highPriorityPayloads.isEmpty {
+            return highPriorityPayloads.removeFirst()
+        }
+        if !normalPriorityPayloads.isEmpty {
+            return normalPriorityPayloads.removeFirst()
+        }
+        return nil
+    }
+
+    mutating func reset() {
+        highPriorityPayloads.removeAll(keepingCapacity: false)
+        normalPriorityPayloads.removeAll(keepingCapacity: false)
+    }
+}
+
 /// Wraps CBPeripheralManager to act as a BLE peripheral (simulated device).
 ///
 /// GATT characteristics (doc 03 §3.1):
@@ -81,6 +140,7 @@ public final class SimulatedPeripheral: NSObject, @unchecked Sendable {
     private var _notifyCharacteristic: CBMutableCharacteristic?
     private var _infoCharacteristic: CBMutableCharacteristic?
     private var controlWriteRouter = ControlWriteRouter()
+    private var notifyBackpressureBuffer = NotifyBackpressureBuffer()
 
     // MARK: - OTA handler (M6)
 
@@ -187,7 +247,8 @@ public final class SimulatedPeripheral: NSObject, @unchecked Sendable {
         }
     }
 
-    /// Push a data sample via notify. Returns true if the central is subscribed.
+    /// Push a data sample via notify. Returns true if the payload was accepted
+    /// into the local send pipeline.
     @discardableResult
     public func pushSample(_ sample: DeviceSample) -> Bool {
         bleQueue.sync {
@@ -196,22 +257,31 @@ public final class SimulatedPeripheral: NSObject, @unchecked Sendable {
                   let pm = _peripheralManager
             else { return false }
 
-            let frames = commandProcessor.encodeSample(sample)
-            for frame in frames {
-                guard let data = faultInjector.apply(frame) else { continue }
-                pm.updateValue(data, for: notifyChar, onSubscribedCentrals: nil)
-            }
+            let payloads = makeNotifyPayloads(
+                from: commandProcessor.encodeSample(sample),
+                priority: .high,
+                source: "sample"
+            )
+            enqueueAndDrainNotifyPayloads(payloads, notifyChar: notifyChar, peripheralManager: pm)
             return true
         }
     }
 
     /// Push raw command/response fragments via notify.
     public func pushResponse(_ fragments: [Data]) {
-        pushNotifyFragments(fragments)
+        pushNotifyFragments(fragments, priority: .high, source: "response")
     }
 
     /// Push arbitrary notify fragments over the Data/Notify channel.
     public func pushNotifyFragments(_ fragments: [Data]) {
+        pushNotifyFragments(fragments, priority: .normal, source: "waveform")
+    }
+
+    private func pushNotifyFragments(
+        _ fragments: [Data],
+        priority: NotifyPayloadPriority,
+        source: String
+    ) {
         bleQueue.async { [weak self] in
             guard let self else { return }
             guard self._centralSubscribed else {
@@ -224,11 +294,65 @@ public final class SimulatedPeripheral: NSObject, @unchecked Sendable {
                 return
             }
 
-            for frag in fragments {
-                guard let data = self.faultInjector.apply(frag) else { continue }
-                let didQueue = pm.updateValue(data, for: notifyChar, onSubscribedCentrals: nil)
-                HRSenseLogging.info(.protoCmd, "NOTIFY queued len=\(data.count) success=\(didQueue)")
+            let payloads = self.makeNotifyPayloads(
+                from: fragments,
+                priority: priority,
+                source: source
+            )
+            self.enqueueAndDrainNotifyPayloads(payloads, notifyChar: notifyChar, peripheralManager: pm)
+        }
+    }
+
+    private func makeNotifyPayloads(
+        from fragments: [Data],
+        priority: NotifyPayloadPriority,
+        source: String
+    ) -> [PendingNotifyPayload] {
+        fragments.compactMap { fragment in
+            guard let data = faultInjector.apply(fragment) else { return nil }
+            return PendingNotifyPayload(data: data, priority: priority, source: source)
+        }
+    }
+
+    private func enqueueAndDrainNotifyPayloads(
+        _ payloads: [PendingNotifyPayload],
+        notifyChar: CBMutableCharacteristic,
+        peripheralManager: CBPeripheralManager
+    ) {
+        guard !payloads.isEmpty else { return }
+        notifyBackpressureBuffer.enqueue(payloads)
+        drainPendingNotifyPayloads(notifyChar: notifyChar, peripheralManager: peripheralManager)
+    }
+
+    private func drainPendingNotifyPayloads(
+        notifyChar: CBMutableCharacteristic,
+        peripheralManager: CBPeripheralManager
+    ) {
+        guard _centralSubscribed else {
+            notifyBackpressureBuffer.reset()
+            return
+        }
+
+        while let payload = notifyBackpressureBuffer.popNext() {
+            let didQueue = peripheralManager.updateValue(
+                payload.data,
+                for: notifyChar,
+                onSubscribedCentrals: nil
+            )
+            if didQueue {
+                HRSenseLogging.info(
+                    .protoCmd,
+                    "NOTIFY sent source=\(payload.source) priority=\(payload.priority.rawValue) len=\(payload.data.count) pending=\(notifyBackpressureBuffer.count)"
+                )
+                continue
             }
+
+            notifyBackpressureBuffer.prepend(payload)
+            HRSenseLogging.info(
+                .protoCmd,
+                "NOTIFY backpressure source=\(payload.source) priority=\(payload.priority.rawValue) pending=\(notifyBackpressureBuffer.count)"
+            )
+            return
         }
     }
 
@@ -243,6 +367,7 @@ public final class SimulatedPeripheral: NSObject, @unchecked Sendable {
 
             self.commandProcessor.updateFirmwareVersion(newVersion)
             self._centralSubscribed = false
+            self.notifyBackpressureBuffer.reset()
             self.controlWriteRouter.reset()
             self.commandProcessor.didDisconnect()
             self._deviceState = .advertising
@@ -272,6 +397,7 @@ extension SimulatedPeripheral: CBPeripheralManagerDelegate {
     public func peripheralManager(_ peripheral: CBPeripheralManager,
                                    central: CBCentral,
                                    didSubscribeTo characteristic: CBCharacteristic) {
+        notifyBackpressureBuffer.reset()
         _centralSubscribed = true
         _deviceState = .connected
         commandProcessor.didConnect()
@@ -283,6 +409,7 @@ extension SimulatedPeripheral: CBPeripheralManagerDelegate {
                                    central: CBCentral,
                                    didUnsubscribeFrom characteristic: CBCharacteristic) {
         _centralSubscribed = false
+        notifyBackpressureBuffer.reset()
         commandProcessor.didDisconnect()
         controlWriteRouter.reset()
         _deviceState = .advertising
@@ -354,6 +481,8 @@ extension SimulatedPeripheral: CBPeripheralManagerDelegate {
     }
 
     public func peripheralManagerIsReady(toUpdateSubscribers peripheral: CBPeripheralManager) {
-        // Ready to send more data — can be used for flow control
+        guard _centralSubscribed,
+              let notifyChar = _notifyCharacteristic else { return }
+        drainPendingNotifyPayloads(notifyChar: notifyChar, peripheralManager: peripheral)
     }
 }

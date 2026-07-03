@@ -12,6 +12,7 @@ final class SimulatorViewModel {
     private var generator: (any DataGeneratorProtocol)?
     private var scenarioEngine: ScenarioEngine?
     private var streamTimer: DispatchSourceTimer?
+    private var waveformStreamers: [WaveformStreamer] = []
     private var streamStartTime: UInt64 = 0
 
     var connectionStatus: String = "Idle"
@@ -35,6 +36,18 @@ final class SimulatorViewModel {
                 self?.updateStatus()
             }
         }
+        peripheral.commandProcessor.setStreamCallbacks(
+            onStart: { [weak self] sampleKinds in
+                Task { @MainActor in
+                    self?.startStreaming(sampleKinds: sampleKinds)
+                }
+            },
+            onStop: { [weak self] in
+                Task { @MainActor in
+                    self?.stopStreaming()
+                }
+            }
+        )
     }
 
     func handleLaunchOnAppear() {
@@ -68,53 +81,26 @@ final class SimulatorViewModel {
     }
 
     func startStream() {
-        guard streamTimer == nil, let generator else { return }
-
-        isStreaming = true
-        streamStartTime = DispatchTime.now().uptimeNanoseconds
-        generator.start()
-
-        let timer = DispatchSource.makeTimerSource(queue: .main)
-        timer.schedule(deadline: .now(), repeating: 1.0)
-        timer.setEventHandler { [weak self] in
-            guard let self, let generator = self.generator, self.isStreaming else { return }
-
-            let elapsedMs = UInt32(
-                (DispatchTime.now().uptimeNanoseconds - self.streamStartTime) / 1_000_000
-            )
-            let sample = generator.nextSample(timestampMs: elapsedMs)
-            _ = self.peripheral.pushSample(sample)
-            self.currentHeartRate = Int(sample.heartRate ?? 0)
-            self.sampleCount += 1
-        }
-        timer.resume()
-        streamTimer = timer
-
-        let command = Command.startStream()
+        let command = Command.startStream(
+            sampleKinds: [DataKind.heartRate.rawValue, DataKind.waveform.rawValue]
+        )
         _ = peripheral.commandProcessor.process(command: command, seq: 0)
-        updateStatus()
     }
 
     func stopStream() {
-        isStreaming = false
-        streamTimer?.cancel()
-        streamTimer = nil
-        generator?.stop()
-
         let command = Command.stopStream()
         _ = peripheral.commandProcessor.process(command: command, seq: 0)
-        updateStatus()
     }
 
     func selectGeneratorMode(_ mode: SimulatorLaunchOptions.GeneratorMode) {
-        selectedGeneratorMode = mode
-        generator = Self.makeGenerator(mode: mode)
+        replaceGenerator(with: Self.makeGenerator(mode: mode), mode: mode)
     }
 
     func setManualHR(_ heartRate: Int) {
         currentHeartRate = heartRate
         if let manualGenerator = generator as? ManualHRGenerator {
             manualGenerator.currentHeartRate = heartRate
+            restartWaveformStreamingIfNeeded()
         }
     }
 
@@ -130,12 +116,12 @@ final class SimulatorViewModel {
         }
         engine.onStreamStart = { [weak self] in
             Task { @MainActor in
-                self?.startStream()
+                self?.startStreaming(sampleKinds: [DataKind.heartRate.rawValue, DataKind.waveform.rawValue])
             }
         }
         engine.onStreamStop = { [weak self] in
             Task { @MainActor in
-                self?.stopStream()
+                self?.stopStreaming()
             }
         }
         engine.onDisconnect = { [weak self] in
@@ -160,11 +146,7 @@ final class SimulatorViewModel {
             return
         }
         let manualGenerator = ManualHRGenerator(heartRate: currentHeartRate)
-        if isStreaming {
-            manualGenerator.start()
-        }
-        generator = manualGenerator
-        selectedGeneratorMode = .manual
+        replaceGenerator(with: manualGenerator, mode: .manual)
     }
 
     private func applyFault(_ fault: FaultConfig) {
@@ -189,6 +171,88 @@ final class SimulatorViewModel {
             connectionStatus = "Handshake Done"
         case .streaming:
             connectionStatus = "Streaming (\(sampleCount) samples)"
+        }
+    }
+
+    private func startStreaming(sampleKinds: [UInt8]) {
+        startHeartRateStreamingIfNeeded(sampleKinds: sampleKinds)
+        startWaveformStreamingIfNeeded(sampleKinds: sampleKinds)
+        updateStatus()
+    }
+
+    private func stopStreaming() {
+        isStreaming = false
+        streamTimer?.cancel()
+        streamTimer = nil
+        waveformStreamers.forEach { $0.stop() }
+        waveformStreamers.removeAll()
+        generator?.stop()
+        updateStatus()
+    }
+
+    private func replaceGenerator(
+        with newGenerator: any DataGeneratorProtocol,
+        mode: SimulatorLaunchOptions.GeneratorMode
+    ) {
+        if isStreaming {
+            newGenerator.start()
+        }
+        generator = newGenerator
+        selectedGeneratorMode = mode
+        restartWaveformStreamingIfNeeded()
+    }
+
+    private func restartWaveformStreamingIfNeeded() {
+        guard !waveformStreamers.isEmpty else { return }
+        waveformStreamers.forEach { $0.stop() }
+        waveformStreamers.removeAll()
+        startWaveformStreamingIfNeeded(sampleKinds: [DataKind.waveform.rawValue])
+    }
+
+    private func startHeartRateStreamingIfNeeded(sampleKinds: [UInt8]) {
+        guard sampleKinds.contains(DataKind.heartRate.rawValue), streamTimer == nil, let generator else { return }
+
+        isStreaming = true
+        streamStartTime = DispatchTime.now().uptimeNanoseconds
+        generator.start()
+
+        let timer = DispatchSource.makeTimerSource(queue: .main)
+        timer.schedule(deadline: .now(), repeating: 1.0)
+        timer.setEventHandler { [weak self] in
+            guard let self, let generator = self.generator, self.isStreaming else { return }
+
+            let elapsedMs = UInt32(
+                (DispatchTime.now().uptimeNanoseconds - self.streamStartTime) / 1_000_000
+            )
+            let sample = generator.nextSample(timestampMs: elapsedMs)
+            _ = self.peripheral.pushSample(sample)
+            self.currentHeartRate = Int(sample.heartRate ?? 0)
+            self.sampleCount += 1
+        }
+        timer.resume()
+        streamTimer = timer
+    }
+
+    private func startWaveformStreamingIfNeeded(sampleKinds: [UInt8]) {
+        guard sampleKinds.contains(DataKind.waveform.rawValue) else {
+            waveformStreamers.forEach { $0.stop() }
+            waveformStreamers.removeAll()
+            return
+        }
+        guard waveformStreamers.isEmpty else { return }
+
+        let generators: [WaveformGenerator] = [
+            .ecg(sampleRateHz: 128, heartRate: Double(currentHeartRate)),
+            .ppg(sampleRateHz: 64, heartRate: Double(currentHeartRate)),
+        ]
+
+        waveformStreamers = generators.map { generator in
+            let streamer = WaveformStreamer(generator: generator)
+            streamer.onBlock = { [weak self] fragment in
+                self?.peripheral.pushNotifyFragments([fragment])
+            }
+            streamer.start()
+            return streamer
         }
     }
 

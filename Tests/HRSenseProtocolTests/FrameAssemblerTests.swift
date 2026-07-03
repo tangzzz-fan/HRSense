@@ -148,6 +148,39 @@ final class FrameAssemblerTests: XCTestCase {
         XCTAssertEqual(r2.count, 0)
     }
 
+    func test_sameSeqDifferentPayloadKindsAreNotDroppedAsDuplicates() {
+        let sample = DeviceSample(timestamp: 500, heartRate: 70, sampleSeq: 9)
+        let dataFragments = encodeData(sample, seq: 3, mtu: 185)
+
+        let waveform = WaveformBlock(
+            waveformType: 2,
+            sampleRateHz: 64,
+            blockSeq: 3,
+            startTimestampMs: 500,
+            sampleBits: 16,
+            samples: Array(repeating: 120, count: 10)
+        )
+        let waveformFragments = WaveformEncoder.encode(block: waveform, seq: 3, mtu: 185)
+
+        let assembler = FrameAssembler()
+
+        let waveformResults = assembler.feed(waveformFragments[0])
+        XCTAssertEqual(waveformResults.count, 1)
+        guard case .waveform = waveformResults[0] else {
+            XCTFail("Expected waveform frame")
+            return
+        }
+
+        let dataResults = assembler.feed(dataFragments[0])
+        XCTAssertEqual(dataResults.count, 1)
+        guard case let .data(decoded) = dataResults[0] else {
+            XCTFail("Expected data frame")
+            return
+        }
+        XCTAssertEqual(decoded.heartRate, 70)
+        XCTAssertEqual(decoded.sampleSeq, 9)
+    }
+
     // MARK: - Orphan fragment (no START)
 
     func test_orphanFragmentDropped() {

@@ -34,3 +34,5 @@ tools/__pycache__/
 *~
 
 .codegraph/
+
+.vscode/

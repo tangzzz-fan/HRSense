@@ -16,11 +16,11 @@ public struct RootView: View {
                 deviceInfoView
                 heartRateView
                 inferenceResultView
+                waveformSectionView
                 sleepMonitoringView
                 sleepHistoryView
-                waveformView
                 errorBannerView
-                Spacer()
+                Spacer(minLength: 24)
             }
             .padding()
         }
@@ -243,17 +243,66 @@ public struct RootView: View {
     // MARK: - Waveform
 
     @ViewBuilder
-    private var waveformView: some View {
-        if store.state.waveform.isStreaming {
-            WaveformDisplayView(
-                samples: store.state.waveform.ecgSamples,
-                metrics: store.state.waveform.metrics,
-                selectedType: Binding(
-                    get: { store.state.waveform.selectedType },
-                    set: { store.dispatch(.waveformTypeSelected($0)) }
+    private var waveformSectionView: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            // Section header
+            HStack {
+                Text("Waveform")
+                    .font(.headline)
+                Spacer()
+                if store.state.waveform.isStreaming {
+                    Circle()
+                        .fill(.green)
+                        .frame(width: 8, height: 8)
+                    Text("Live")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                } else {
+                    Text("Idle")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            if store.state.waveform.isStreaming {
+                WaveformDisplayView(
+                    samples: displayedWaveformSamples,
+                    metrics: store.state.waveform.metrics,
+                    selectedType: Binding(
+                        get: { store.state.waveform.selectedType },
+                        set: { store.dispatch(.waveformTypeSelected($0)) }
+                    )
                 )
-            )
+            } else {
+                // Placeholder when no waveform stream is active
+                VStack(spacing: 12) {
+                    WaveformCanvasView(samples: [], waveformType: .ecg, windowSeconds: 5)
+                        .frame(height: 120)
+                        .background(Color.black.opacity(0.04))
+                        .cornerRadius(8)
+                        .overlay {
+                            Text("Waiting for waveform data…")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+
+                    Picker("Type", selection: Binding(
+                        get: { store.state.waveform.selectedType },
+                        set: { store.dispatch(.waveformTypeSelected($0)) }
+                    )) {
+                        Text("ECG").tag(WaveformType.ecg)
+                        Text("PPG").tag(WaveformType.ppg)
+                    }
+                    .pickerStyle(.segmented)
+                    .disabled(true)
+                }
+            }
         }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.secondary.opacity(0.06))
+        )
     }
 
     // MARK: - Error banner
@@ -321,6 +370,15 @@ public struct RootView: View {
             return device.name
         }
         return "HRSense Peripheral"
+    }
+
+    private var displayedWaveformSamples: [WaveformSample] {
+        switch store.state.waveform.selectedType {
+        case .ecg:
+            return store.state.waveform.ecgSamples
+        case .ppg:
+            return store.state.waveform.ppgSamples
+        }
     }
 
     private static let dateFormatter: DateFormatter = {
