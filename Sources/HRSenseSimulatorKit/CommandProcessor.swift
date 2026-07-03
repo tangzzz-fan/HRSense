@@ -8,7 +8,7 @@ import HRSenseProtocol
 public final class CommandProcessor: @unchecked Sendable {
 
     public private(set) var state: DeviceState = .advertising
-    private let config: SimulatorConfig
+    private var config: SimulatorConfig
     private var onStreamStart: (([UInt8]) -> Void)?
     private var onStreamStop: (() -> Void)?
     private var streamSeq: UInt8 = 0
@@ -22,6 +22,12 @@ public final class CommandProcessor: @unchecked Sendable {
         self.onStreamStart = onStreamStart
         self.onStreamStop = onStreamStop
     }
+
+    public var model: String { config.model }
+    public var firmwareVersion: String { config.firmwareVersion }
+    public var protocolVersion: UInt8 { config.protocolVersion }
+    public var capabilities: UInt32 { config.capabilities }
+    public var advertisingLocalName: String { config.advertisingLocalName }
 
     /// Updates the runtime callbacks used to start/stop simulator data streams.
     public func setStreamCallbacks(
@@ -83,6 +89,10 @@ public final class CommandProcessor: @unchecked Sendable {
     public func didDisconnect() {
         onStreamStop?()
         state = .advertising
+    }
+
+    public func updateFirmwareVersion(_ firmwareVersion: String) {
+        config.firmwareVersion = firmwareVersion
     }
 
     /// Encode a data sample for the current stream.

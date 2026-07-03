@@ -10,6 +10,9 @@ public final class OTAEventHandler: @unchecked Sendable {
     private let stateMachine: OTAStateMachine
     private var imageBuffer: OTAImageBuffer?
     private let mtu: Int
+    private let batteryPercent: UInt8
+    private let maxChunkSize: UInt16
+    private let maxWindow: UInt8
     private var lastTransferredCRC32: UInt32?
     private var pendingWindow: PendingWindow?
 
@@ -18,11 +21,21 @@ public final class OTAEventHandler: @unchecked Sendable {
         let size: Int
     }
 
-    public var onRebootNeeded: (() -> Void)?
+    public var onRebootNeeded: ((String) -> Void)?
 
-    public init(stateMachine: OTAStateMachine, mtu: Int = 185) {
+    public init(
+        stateMachine: OTAStateMachine,
+        mtu: Int = 185,
+        batteryPercent: UInt8 = 85,
+        maxChunkSize: UInt16? = nil,
+        maxWindow: UInt8 = 1
+    ) {
         self.stateMachine = stateMachine
         self.mtu = mtu
+        self.batteryPercent = batteryPercent
+        let derivedChunkSize = max(1, mtu - 4)
+        self.maxChunkSize = maxChunkSize ?? UInt16(min(derivedChunkSize, Int(UInt16.max)))
+        self.maxWindow = maxWindow
     }
 
     /// Handle an OTA command received via Control/Write (0003).
@@ -50,13 +63,13 @@ public final class OTAEventHandler: @unchecked Sendable {
     public func receiveOTAChunk(packet: [UInt8]) -> [OTACommand] {
         guard packet.count >= 4 else {
             HRSenseLogging.error(.ota, "OTA chunk rejected: packet too short")
-            return [OTACommand.otaWindowAck(status: .invalidImage, offset: 0)]
+            return [OTACommand.otaWindowAck(status: .invalidImage, offset: 0, windowCRC32: 0)]
         }
         guard stateMachine.state == .transferring,
               let buf = imageBuffer,
               let window = pendingWindow else {
             HRSenseLogging.error(.ota, "OTA chunk rejected: no pending window state=\(stateMachine.state)")
-            return [OTACommand.otaWindowAck(status: .windowOutOfOrder, offset: 0)]
+            return [OTACommand.otaWindowAck(status: .windowOutOfOrder, offset: 0, windowCRC32: 0)]
         }
 
         let offset = Int(UInt32(packet[0]) | (UInt32(packet[1]) << 8) |
@@ -66,18 +79,19 @@ public final class OTAEventHandler: @unchecked Sendable {
         guard offset == window.offset, data.count == window.size else {
             HRSenseLogging.error(.ota, "OTA chunk rejected: expected offset=\(window.offset) size=\(window.size), got offset=\(offset) size=\(data.count)")
             pendingWindow = nil
-            return [OTACommand.otaWindowAck(status: .windowOutOfOrder, offset: UInt32(buf.resumeOffset))]
+            return [OTACommand.otaWindowAck(status: .windowOutOfOrder, offset: UInt32(buf.resumeOffset), windowCRC32: 0)]
         }
 
         guard buf.write(offset: offset, data: data) else {
             HRSenseLogging.error(.ota, "OTA chunk rejected: write failed at offset=\(offset)")
             pendingWindow = nil
-            return [OTACommand.otaWindowAck(status: .invalidImage, offset: UInt32(buf.resumeOffset))]
+            return [OTACommand.otaWindowAck(status: .invalidImage, offset: UInt32(buf.resumeOffset), windowCRC32: 0)]
         }
 
         pendingWindow = nil
+        let windowCRC32 = CRC32.compute(Data(data))
         HRSenseLogging.debug(.ota, "OTA chunk accepted: offset=\(offset) size=\(data.count) progress=\(String(format: "%.1f%%", buf.progress * 100))")
-        return [OTACommand.otaWindowAck(status: .success, offset: UInt32(buf.resumeOffset))]
+        return [OTACommand.otaWindowAck(status: .success, offset: UInt32(buf.resumeOffset), windowCRC32: windowCRC32)]
     }
 
     // MARK: - Private handlers
@@ -92,7 +106,7 @@ public final class OTAEventHandler: @unchecked Sendable {
 
         // Precondition checks
         if let failure = OTAPreconditionChecker.check(
-            batteryPercent: 85,
+            batteryPercent: batteryPercent,
             currentVersion: stateMachine.currentVersion,
             targetVersion: newVersion
         ) {
@@ -103,7 +117,7 @@ public final class OTAEventHandler: @unchecked Sendable {
         // Check CRC match for resume
         let resumeOff: UInt32?
         if let lastCRC = lastTransferredCRC32, lastCRC == imageCRC32,
-           let buf = imageBuffer, buf.finalCRC32 == imageCRC32 {
+           let buf = imageBuffer, buf.totalSize == Int(imageSize), buf.resumeOffset > 0 {
             let off = UInt32(buf.resumeOffset)
             resumeOff = off > 0 ? off : nil
             HRSenseLogging.info(.ota, "Resuming from offset=\(off) (CRC match)")
@@ -119,16 +133,21 @@ public final class OTAEventHandler: @unchecked Sendable {
         stateMachine.handle(.startReceived(imageSize: imageSize, imageCRC32: imageCRC32, newVersion: newVersion))
         stateMachine.handle(.windowTransferComplete)
 
-        return [OTACommand.otaStartAck(status: .success, resumeOffset: resumeOff)]
+        return [OTACommand.otaStartAck(
+            status: .success,
+            resumeOffset: resumeOff,
+            maxChunkSize: maxChunkSize,
+            maxWindow: maxWindow
+        )]
     }
 
     private func handleWindow(_ cmd: OTACommand) -> [OTACommand] {
         guard let buf = imageBuffer else {
-            return [OTACommand.otaWindowAck(status: .invalidImage, offset: 0)]
+            return [OTACommand.otaWindowAck(status: .invalidImage, offset: 0, windowCRC32: 0)]
         }
 
         guard cmd.payload.count >= 6 else {
-            return [OTACommand.otaWindowAck(status: .invalidImage, offset: 0)]
+            return [OTACommand.otaWindowAck(status: .invalidImage, offset: 0, windowCRC32: 0)]
         }
         let offset = Int(UInt32(cmd.payload[0]) | (UInt32(cmd.payload[1]) << 8) |
                          (UInt32(cmd.payload[2]) << 16) | (UInt32(cmd.payload[3]) << 24))
@@ -137,7 +156,7 @@ public final class OTAEventHandler: @unchecked Sendable {
         guard offset == buf.resumeOffset else {
             HRSenseLogging.error(.ota, "OTA_WINDOW out of order: expected offset=\(buf.resumeOffset) got=\(offset)")
             pendingWindow = nil
-            return [OTACommand.otaWindowAck(status: .windowOutOfOrder, offset: UInt32(buf.resumeOffset))]
+            return [OTACommand.otaWindowAck(status: .windowOutOfOrder, offset: UInt32(buf.resumeOffset), windowCRC32: 0)]
         }
 
         pendingWindow = PendingWindow(offset: offset, size: size)
@@ -181,8 +200,9 @@ public final class OTAEventHandler: @unchecked Sendable {
 
         DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) { [weak self] in
             self?.stateMachine.handle(.rebootComplete)
-            HRSenseLogging.info(.ota, "OTA reboot complete — new version=\(self?.stateMachine.currentVersion ?? "?")")
-            self?.onRebootNeeded?()
+            let currentVersion = self?.stateMachine.currentVersion ?? "?"
+            HRSenseLogging.info(.ota, "OTA reboot complete — new version=\(currentVersion)")
+            self?.onRebootNeeded?(currentVersion)
         }
 
         return [OTACommand(opCode: .otaApply, payload: [OTAStatusCode.success.rawValue])]

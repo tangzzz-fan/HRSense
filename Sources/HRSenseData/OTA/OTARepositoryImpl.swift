@@ -23,6 +23,7 @@ public final class OTARepositoryImpl: OTARepository, @unchecked Sendable {
     private var progressContinuation: AsyncStream<OTAProgress>.Continuation?
     private var shouldAbort = false
     private var windowSize: Int = 256
+    private var maxWindow: Int = 1
 
     /// Last known image CRC32 from a previous (possibly interrupted) transfer.
     private var lastTransferredCRC32: UInt32?
@@ -63,33 +64,37 @@ public final class OTARepositoryImpl: OTARepository, @unchecked Sendable {
         let startResp = try await sendOTAControlAndWait(startCmd, 5.0)
 
         guard startResp.opCode == .otaStartAck,
-              let statusByte = startResp.payload.first
-        else {
+              let startAck = OTACommand.parseStartAckPayload(startResp.payload) else {
             HRSenseLogging.error(.ota, "OTA_START rejected: invalid response")
             emit(.failed(error: "OTA_START rejected"))
             throw AppError.otaFailed(phase: "start")
         }
 
-        guard statusByte == OTAStatusCode.success.rawValue else {
-            HRSenseLogging.error(.ota, "OTA_START rejected: status=0x\(String(statusByte, radix: 16))")
-            emit(.failed(error: "OTA_START status=\(statusByte)"))
+        guard startAck.status == .success else {
+            HRSenseLogging.error(.ota, "OTA_START rejected: status=\(startAck.status)")
+            emit(.failed(error: "OTA_START status=\(startAck.status.rawValue)"))
             throw AppError.otaFailed(phase: "start")
         }
 
-        // Parse resumeOffset from response (if device has partial image with matching CRC)
-        if startResp.payload.count >= 5 {
-            let resumeOff = Int(UInt32(startResp.payload[1]) | (UInt32(startResp.payload[2]) << 8) |
-                               (UInt32(startResp.payload[3]) << 16) | (UInt32(startResp.payload[4]) << 24))
+        if let resumeOffset = startAck.resumeOffset {
+            let resumeOff = Int(resumeOffset)
             lastResumeOffset = resumeOff
             HRSenseLogging.info(.ota, "Device resumeOffset=\(resumeOff)")
         }
+        if let maxChunkSize = startAck.maxChunkSize {
+            windowSize = max(1, Int(maxChunkSize))
+        }
+        if let maxWindow = startAck.maxWindow {
+            self.maxWindow = max(1, Int(maxWindow))
+        }
+        HRSenseLogging.info(.ota, "Negotiated OTA limits: maxChunkSize=\(windowSize) maxWindow=\(maxWindow)")
 
-        // Check imageCRC32 match for resume
-        if let lastCRC = lastTransferredCRC32, lastCRC == computedCRC, lastResumeOffset > 0, lastResumeOffset < fullImage.count {
-            HRSenseLogging.info(.ota, "Resuming transfer from offset=\(lastResumeOffset) (CRC match)")
+        // Device already validated the image identity by returning resumeOffset in OTA_START_ACK.
+        if lastResumeOffset > 0, lastResumeOffset < fullImage.count {
+            HRSenseLogging.info(.ota, "Resuming transfer from offset=\(lastResumeOffset)")
         } else {
             lastResumeOffset = 0
-            HRSenseLogging.info(.ota, "Starting fresh transfer (no CRC match or first attempt)")
+            HRSenseLogging.info(.ota, "Starting fresh transfer")
         }
 
         // Store CRC for potential future resume
@@ -123,7 +128,11 @@ public final class OTARepositoryImpl: OTARepository, @unchecked Sendable {
 
                 do {
                     let ack = try await waitForOTAWindowAck(2.0)
-                    windowOK = isAcceptedWindowAck(ack, expectedOffset: windowEnd)
+                    windowOK = isAcceptedWindowAck(
+                        ack,
+                        expectedOffset: windowEnd,
+                        expectedWindowCRC32: CRC32.compute(chunk)
+                    )
                     if !windowOK {
                         HRSenseLogging.error(.ota, "OTA_WINDOW_ACK rejected offset=\(offset) attempt=\(attempt)")
                     }
@@ -211,20 +220,18 @@ public final class OTARepositoryImpl: OTARepository, @unchecked Sendable {
         return packet
     }
 
-    private func isAcceptedWindowAck(_ ack: OTACommand, expectedOffset: Int) -> Bool {
+    private func isAcceptedWindowAck(_ ack: OTACommand, expectedOffset: Int, expectedWindowCRC32: UInt32) -> Bool {
         guard ack.opCode == .otaWindowAck,
-              ack.payload.count >= 5,
-              let status = OTAStatusCode(rawValue: ack.payload[0]) else {
+              let parsed = OTACommand.parseWindowAckPayload(ack.payload) else {
             return false
         }
-
-        let acknowledgedOffset = Int(
-            UInt32(ack.payload[1]) |
-            (UInt32(ack.payload[2]) << 8) |
-            (UInt32(ack.payload[3]) << 16) |
-            (UInt32(ack.payload[4]) << 24)
+        let acknowledgedOffset = Int(parsed.recvOffset)
+        HRSenseLogging.debug(
+            .ota,
+            "OTA_WINDOW_ACK status=\(parsed.status) recvOffset=\(acknowledgedOffset) windowCRC32=0x\(String(parsed.windowCRC32, radix: 16))"
         )
-        HRSenseLogging.debug(.ota, "OTA_WINDOW_ACK status=\(status) recvOffset=\(acknowledgedOffset)")
-        return status == .success && acknowledgedOffset == expectedOffset
+        return parsed.status == .success &&
+            acknowledgedOffset == expectedOffset &&
+            parsed.windowCRC32 == expectedWindowCRC32
     }
 }

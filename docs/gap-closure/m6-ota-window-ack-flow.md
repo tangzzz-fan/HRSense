@@ -69,12 +69,14 @@
 - `OTA_WINDOW_BEGIN` 只负责声明窗口
 - `0005` 发送的数据包改为 `offset(u32 LE) + payload`
 - 每个窗口发送后调用 `waitForOTAWindowAck`
-- 仅在 ACK `status == success` 且 `recvOffset == expectedOffset` 时推进进度
+- 仅在 ACK `status == success`、`recvOffset == expectedOffset` 且 `windowCRC32 == expectedWindowCRC32` 时推进进度
 - 超时或 NAK 时进入窗口级重试
+- `OTA_START_ACK` 现会解析 `maxChunkSize / maxWindow`，并按设备协商值裁剪窗口大小
 
 同时修复了一个已有问题：
 
 - `OTA_START_ACK.resumeOffset` 原解析偏移错误，现已按当前 payload 结构修正
+- 续传判断改为以设备返回的 `resumeOffset` 为准，而不是依赖 App 进程内的临时状态
 
 ### 模拟器侧
 
@@ -86,7 +88,21 @@
 2. `0005` 收到 `offset + payload`
 3. 校验窗口 offset/size
 4. 写入 `OTAImageBuffer`
-5. 返回 `OTA_WINDOW_ACK`
+5. 计算该窗口 `windowCRC32`
+6. 返回 `OTA_WINDOW_ACK`
+
+`OTA_START_ACK` 也已补齐为：
+
+- `status`
+- `resumeOffset`
+- `maxChunkSize`
+- `maxWindow`
+
+同时补充了设备侧前置校验：
+
+- 低电量时拒绝 OTA
+- 降级升级请求拒绝 OTA
+- `OTA_ABORT` 会清理窗口状态与缓存上下文
 
 #### `SimulatedPeripheral`
 
@@ -95,6 +111,8 @@
 - `0003` 对原始 OTA 控制命令的路由
 - `0005` 对 OTA chunk 的真实处理
 - OTA 响应通过 notify 回传 App
+- OTA `APPLY` 完成后会更新运行时 `firmwareVersion`
+- 设备“重启”后会清理连接态并重新进入 advertising，下一次握手可读到新版本
 
 ## 代码落点
 
@@ -109,25 +127,43 @@
 新增单元测试：
 
 - `Tests/HRSenseSimulatorKitTests/OTAEventHandlerTests.swift`
-  - 校验窗口 begin + `0005` chunk 后能生成 `OTA_WINDOW_ACK`
+  - 校验 `OTA_START_ACK` 会携带 `resumeOffset / maxChunkSize / maxWindow`
+  - 校验窗口 begin + `0005` chunk 后能生成携带 `windowCRC32` 的 `OTA_WINDOW_ACK`
   - 校验无 pending window 时返回 out-of-order ack
+  - 校验窗口乱序 begin 的失败路径
+  - 校验同一镜像重启/重连后设备返回 `resumeOffset`
+  - 校验低电量拒绝 OTA
+  - 校验降级请求被拒绝
+  - 校验 `OTA_ABORT` 后窗口状态被清空
 - `Tests/HRSenseDataTests/OTARepositoryImplTests.swift`
   - 校验仓储层会等待窗口 ACK
   - 校验 `0005` 发包格式已变为 `offset + payload`
+  - 校验会遵循 `maxChunkSize` 协商结果拆分窗口
+  - 校验 `OTA_WINDOW_ACK` 超时重试失败
+  - 校验 `windowCRC32` 不匹配时拒绝推进窗口
+  - 校验 `OTA_START` 被低电量拒绝时直接失败
+  - 校验整包 validate 失败路径
+  - 校验 `resumeOffset` 续传时仅发送剩余字节
+- `Tests/HRSenseSimulatorKitTests/SimulatedPeripheralOTATests.swift`
+  - 校验 OTA `APPLY` 触发“重启”后，下一次 `HELLO` 已经返回新 `firmwareVersion`
 
 ## 对 M6 验收的直接收益
 
-本次更新后，M6 从“sleep 驱动的半实现”推进到“窗口级 ACK 驱动的真实流控路径”，直接改善以下验收项：
+本次更新后，M6 从“sleep 驱动的半实现”推进到“窗口级 ACK 驱动的真实流控路径”，并补上了关键失败/续传测试，直接改善以下验收项：
 
 - 窗口重传具备真实触发基础
 - `0005` 数据通路已能进入设备端缓存
 - OTA 进度推进不再依赖固定延时
+- `windowCRC32` 已进入协议与校验链路
+- `OTA_START_ACK` 已进入协商参数链路
+- 续传逻辑已有设备侧与 App 侧回归测试
+- 低电量 / 降级 / abort 等关键失败路径已有自动化测试
+- 设备 OTA 后的新版本已能在下一次握手中被读取
 
 ## 仍未完全闭合的部分
 
 以下内容仍建议作为下一轮 M6 补齐：
 
-- `OTA_WINDOW_ACK` payload 还未完全扩展到 `docs/07-ota-dfu.md` 中的 `windowCRC32`
-- 模拟器重启/重连后的 OTA 续传路径仍需端到端打通
 - 需要补齐真机 + macOS 模拟器联调验收记录
-- 需要补充 OTA 失败路径测试：CRC mismatch / timeout / retry exhausted / abort
+- App 自动回连并自动再次执行握手的端到端联调仍需补实机/模拟器验收记录
+- 需要继续补充 OTA 失败路径测试：设备重启后不回来、`APPLY` 失败、低电量在升级中途下降

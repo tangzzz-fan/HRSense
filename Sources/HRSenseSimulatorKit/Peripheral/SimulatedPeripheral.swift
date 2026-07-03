@@ -57,6 +57,10 @@ public final class SimulatedPeripheral: NSObject, @unchecked Sendable {
         bleQueue.sync { _deviceState }
     }
 
+    public var currentFirmwareVersion: String {
+        bleQueue.sync { commandProcessor.firmwareVersion }
+    }
+
     /// Current data generator.
     public var generator: (any DataGeneratorProtocol)?
 
@@ -116,6 +120,10 @@ public final class SimulatedPeripheral: NSObject, @unchecked Sendable {
 
         super.init()
 
+        self.otaEventHandler?.onRebootNeeded = { [weak self] newVersion in
+            self?.handleOTAReboot(newVersion: newVersion)
+        }
+
         _peripheralManager = CBPeripheralManager(delegate: self, queue: bleQueue)
     }
 
@@ -162,7 +170,7 @@ public final class SimulatedPeripheral: NSObject, @unchecked Sendable {
 
             let advertisementData: [String: Any] = [
                 CBAdvertisementDataServiceUUIDsKey: [self.serviceUUID],
-                CBAdvertisementDataLocalNameKey: "HRSense-Sim",
+                CBAdvertisementDataLocalNameKey: self.commandProcessor.advertisingLocalName,
             ]
             pm.startAdvertising(advertisementData)
             self._isAdvertising = true
@@ -227,6 +235,27 @@ public final class SimulatedPeripheral: NSObject, @unchecked Sendable {
     private func pushOTAResponses(_ commands: [OTACommand]) {
         let fragments = commands.map { Data(OTACodec.encode($0)) }
         pushNotifyFragments(fragments)
+    }
+
+    private func handleOTAReboot(newVersion: String) {
+        bleQueue.async { [weak self] in
+            guard let self, let pm = self._peripheralManager else { return }
+
+            self.commandProcessor.updateFirmwareVersion(newVersion)
+            self._centralSubscribed = false
+            self.controlWriteRouter.reset()
+            self.commandProcessor.didDisconnect()
+            self._deviceState = .advertising
+            self.onStateChanged?(self._deviceState)
+
+            pm.stopAdvertising()
+            self._isAdvertising = false
+
+            self.bleQueue.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                guard let self else { return }
+                self.startAdvertising()
+            }
+        }
     }
 }
 
@@ -312,9 +341,9 @@ extension SimulatedPeripheral: CBPeripheralManagerDelegate {
                                    didReceiveRead request: CBATTRequest) {
         if request.characteristic.uuid == infoCharUUID {
             let info: [String: String] = [
-                "model": "HRSense-Sim",
-                "firmwareVersion": "1.0.0-sim",
-                "protocolVersion": "1",
+                "model": commandProcessor.model,
+                "firmwareVersion": commandProcessor.firmwareVersion,
+                "protocolVersion": "\(commandProcessor.protocolVersion)",
             ]
             let infoData = (try? JSONSerialization.data(withJSONObject: info)) ?? Data()
             request.value = infoData

@@ -76,18 +76,74 @@ public struct OTACommand: Equatable, Sendable {
     }
 
     /// Build OTA_START_ACK response.
-    public static func otaStartAck(status: OTAStatusCode, resumeOffset: UInt32? = nil) -> OTACommand {
+    ///
+    /// Payload layout:
+    ///   status(u8) + resumeOffset(u32 LE) + maxChunkSize(u16 LE) + maxWindow(u8)
+    public static func otaStartAck(
+        status: OTAStatusCode,
+        resumeOffset: UInt32? = nil,
+        maxChunkSize: UInt16? = nil,
+        maxWindow: UInt8? = nil
+    ) -> OTACommand {
         var payload: [UInt8] = [status.rawValue]
-        if let off = resumeOffset {
+        if let off = resumeOffset ?? ((maxChunkSize != nil || maxWindow != nil) ? 0 : nil) {
             var o = off.littleEndian; Swift.withUnsafeBytes(of: &o) { payload.append(contentsOf: $0) }
+        }
+        if let chunkSize = maxChunkSize {
+            var size = chunkSize.littleEndian; Swift.withUnsafeBytes(of: &size) { payload.append(contentsOf: $0) }
+        }
+        if let maxWindow {
+            payload.append(maxWindow)
         }
         return OTACommand(opCode: .otaStartAck, payload: payload)
     }
 
+    public static func parseStartAckPayload(
+        _ payload: [UInt8]
+    ) -> (status: OTAStatusCode, resumeOffset: UInt32?, maxChunkSize: UInt16?, maxWindow: UInt8?)? {
+        guard let statusByte = payload.first,
+              let status = OTAStatusCode(rawValue: statusByte) else {
+            return nil
+        }
+
+        let resumeOffset: UInt32?
+        if payload.count >= 5 {
+            resumeOffset = UInt32(payload[1]) |
+                (UInt32(payload[2]) << 8) |
+                (UInt32(payload[3]) << 16) |
+                (UInt32(payload[4]) << 24)
+        } else {
+            resumeOffset = nil
+        }
+
+        let maxChunkSize: UInt16?
+        if payload.count >= 7 {
+            maxChunkSize = UInt16(payload[5]) | (UInt16(payload[6]) << 8)
+        } else {
+            maxChunkSize = nil
+        }
+
+        let maxWindow = payload.count >= 8 ? payload[7] : nil
+        return (status, resumeOffset, maxChunkSize, maxWindow)
+    }
+
     /// Build OTA_WINDOW_ACK response.
-    public static func otaWindowAck(status: OTAStatusCode, offset: UInt32) -> OTACommand {
-        var payload: [UInt8] = [status.rawValue]
+    ///
+    /// Payload layout follows `docs/07-ota-dfu.md`:
+    ///   recvOffset(u32 LE) + windowCRC32(u32 LE) + status(u8)
+    public static func otaWindowAck(status: OTAStatusCode, offset: UInt32, windowCRC32: UInt32) -> OTACommand {
+        var payload: [UInt8] = []
         var off = offset.littleEndian; Swift.withUnsafeBytes(of: &off) { payload.append(contentsOf: $0) }
+        var crc = windowCRC32.littleEndian; Swift.withUnsafeBytes(of: &crc) { payload.append(contentsOf: $0) }
+        payload.append(status.rawValue)
         return OTACommand(opCode: .otaWindowAck, payload: payload)
+    }
+
+    public static func parseWindowAckPayload(_ payload: [UInt8]) -> (recvOffset: UInt32, windowCRC32: UInt32, status: OTAStatusCode)? {
+        guard payload.count >= 9 else { return nil }
+        let offset = UInt32(payload[0]) | (UInt32(payload[1]) << 8) | (UInt32(payload[2]) << 16) | (UInt32(payload[3]) << 24)
+        let crc = UInt32(payload[4]) | (UInt32(payload[5]) << 8) | (UInt32(payload[6]) << 16) | (UInt32(payload[7]) << 24)
+        guard let status = OTAStatusCode(rawValue: payload[8]) else { return nil }
+        return (offset, crc, status)
     }
 }
