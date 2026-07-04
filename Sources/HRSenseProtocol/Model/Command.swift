@@ -100,6 +100,30 @@ extension Command {
         )
     }
 
+    /// Build an INFO response with the same device metadata payload shape.
+    public static func info(
+        version: UInt8 = ProtocolVersion.v1,
+        capabilities: Capabilities,
+        model: String,
+        firmwareVersion: String
+    ) -> Command {
+        var capsLE = capabilities.rawValue.littleEndian
+        let capsBytes = Swift.withUnsafeBytes(of: &capsLE) { Array($0) }
+        let modelBytes = Array(model.utf8)
+        let fwBytes = Array(firmwareVersion.utf8)
+        let params: [TLVRecord] = [
+            TLVRecord(tag: .heartRate, value: [version]),
+            TLVRecord(tag: .capabilities, value: capsBytes),
+            TLVRecord(tag: .battery, value: modelBytes),
+            TLVRecord(tag: .sensorStatus, value: fwBytes),
+        ]
+        return Command(
+            opCode: .info,
+            flags: CommandFlags(isResponse: true),
+            params: params
+        )
+    }
+
     /// Build a START_STREAM command.
     public static func startStream(sampleKinds: [UInt8] = [0x01]) -> Command {
         Command(

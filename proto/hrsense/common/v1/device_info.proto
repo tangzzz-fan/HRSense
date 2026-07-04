@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package hrsense.common.v1;
+
+option swift_prefix = "HRS";
+
+message DeviceInfo {
+  string model = 1;
+  string firmware_version = 2;
+  uint32 protocol_version = 3;
+  uint32 capabilities = 4;
+}

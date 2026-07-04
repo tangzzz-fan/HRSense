@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package hrsense.session.v1;
+
+option swift_prefix = "HRS";
+
+import "hrsense/common/v1/device_info.proto";
+
+message HelloRequest {
+  repeated uint32 supported_protocol_versions = 1;
+  uint32 app_capabilities = 2;
+  uint32 schema_version = 3;
+}
+
+message HelloAck {
+  uint32 negotiated_protocol_version = 1;
+  uint32 device_capabilities = 2;
+  hrsense.common.v1.DeviceInfo device_info = 3;
+  uint32 schema_version = 4;
+}

@@ -19,7 +19,7 @@ public struct SimulatorConfig: Equatable, Sendable {
         model: String = "HRSense-Sim",
         firmwareVersion: String = "1.0.0-sim",
         protocolVersion: UInt8 = 0x01,
-        capabilities: UInt32 = 0x0000_002F,  // HR + RR + battery + contact + configurable
+        capabilities: UInt32 = 0x0000_082F,  // HR + RR + battery + contact + configurable + protobuf
         advertisingLocalName: String = "HRSense-Sim",
         mtu: Int = 185
     ) {

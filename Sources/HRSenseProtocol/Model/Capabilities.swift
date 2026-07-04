@@ -20,8 +20,9 @@ public struct Capabilities: OptionSet, Equatable, Sendable {
     public static let batchSamples     = Capabilities(rawValue: 1 << 8)
     public static let otaDFU           = Capabilities(rawValue: 1 << 9)
     public static let waveform         = Capabilities(rawValue: 1 << 10)
+    public static let protobufPayload  = Capabilities(rawValue: 1 << 11)
 
-    // Bits 11–31 reserved, must be zero.
+    // Bits 12–31 reserved, must be zero.
 
     /// Encode as u32 little-endian bytes.
     public var bytesLE: [UInt8] {

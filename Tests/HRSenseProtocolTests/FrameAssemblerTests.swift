@@ -37,6 +37,27 @@ final class FrameAssemblerTests: XCTestCase {
         XCTAssertEqual(decoded.opCode, .startStream)
     }
 
+    func test_singleFragmentProtobufCommandFrame() throws {
+        let cmd = Command.helloAck(
+            version: ProtocolVersion.v1,
+            capabilities: [.heartRate, .protobufPayload],
+            model: "HRSense-Sim",
+            firmwareVersion: "1.0.0-sim"
+        )
+        let fragments = try encodeProtobufCommand(cmd, seq: 1, mtu: 185)
+
+        let assembler = FrameAssembler()
+        let results = assembler.feed(fragments[0])
+
+        XCTAssertEqual(results.count, 1)
+        guard case let .command(decoded) = results[0] else {
+            XCTFail("Expected .command, got \(results[0])")
+            return
+        }
+        XCTAssertEqual(decoded.opCode, .helloAck)
+        XCTAssertTrue(decoded.flags.isResponse)
+    }
+
     // MARK: - Multi-fragment frame (in-order)
 
     func test_multiFragmentFrame() {

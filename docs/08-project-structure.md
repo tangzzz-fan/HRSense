@@ -153,7 +153,7 @@ Sources/HRSenseProtocol/
 └── Capabilities.swift
 ```
 - 无外部依赖；纯字节 in/out，黄金样例(golden bytes)单测。
-- 若启用 Protobuf，它仍属于 **L4 应用负载编码** 的一部分：`.proto` 放仓库根的 `proto/`，生成代码由 iOS / Android / FW 各自消费；`HRSenseProtocol` 继续负责 **L2–L4 的 framing/协商/编解码入口**，而不是把 Protobuf 放到 UI 或存储层。
+- 若启用 Protobuf，它仍属于 **协议负载编码分支** 的一部分：`.proto` 放仓库根的 `proto/`，生成代码由 iOS / Android / FW 各自消费；`HRSenseProtocol` 继续负责 **L2–L4 的 framing/协商/编解码入口**，而不是把 Protobuf 放到 UI 或存储层。首批落地应优先结构化低吞吐消息，不触碰波形与 OTA 数据块。
 
 ### 5.2 `HRSenseCore`（Domain）
 ```text

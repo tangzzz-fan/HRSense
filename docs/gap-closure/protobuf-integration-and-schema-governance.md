@@ -23,6 +23,10 @@
 4. **如何做版本兼容、维护和升级**
 5. **iOS / Android / 固件团队如何共享和治理这一层契约**
 
+实践落地顺序、稳定性、回退与可回溯要求，另见：
+
+- [m1-tlv-to-protobuf-practice-guide.md](file:///Users/apple/Developments/HRSense/docs/gap-closure/m1-tlv-to-protobuf-practice-guide.md)
+
 ---
 
 ## 2. 当前项目里 Protobuf 的正确边界
@@ -489,7 +493,8 @@ enum SensorStatus {
 建议优先：
 
 - `DeviceInfo`
-- `Hello` / `HelloAck`
+- `HelloAck`
+- `INFO`
 
 不要第一步就碰：
 
@@ -509,8 +514,8 @@ enum SensorStatus {
 保持：
 
 - L2 不变
-- L3 不变
-- 仅 L4 payload 可切换
+- 命令语义（opcode / flags）不变
+- 首批只切结构化响应载荷，不切高吞吐数据块
 
 ### 第四步：能力协商灰度启用
 
@@ -609,13 +614,13 @@ message DeviceInfo {
 
 对当前项目而言，Protobuf **可以集成**，但推荐的方式不是大规模替换，而是：
 
-- **坚持 L4 边界**
+- **坚持不侵入 GATT / L2 / ACK / CRC 的边界**
 - **优先结构化消息**
 - **保留高吞吐二进制块的自定义编码**
 - **把 `.proto` 当成跨端契约治理资产**
 
 最重要的结论只有一句：
 
-- **当前项目最合适的方案，是“自定义传输层 + 可选 Protobuf 业务负载”的混合架构。**
+- **当前项目最合适的方案，是“自定义传输层 + 可选 Protobuf 结构化负载”的混合架构。**
 
 这既保留了 BLE/OTA/波形吞吐上的工程控制力，也能满足 JD 中强调的跨端协议协作与 schema 治理能力。

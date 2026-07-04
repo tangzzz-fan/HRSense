@@ -192,7 +192,8 @@ Dev → App: HELLO_ACK { protoVersion:1, capabilities, model, fw }
 | 8 | `BATCH_SAMPLES` | 批量样本上报 |
 | 9 | `OTA_DFU` | 支持固件升级（见 [07](07-ota-dfu.md)）|
 | 10 | `WAVEFORM` | 支持高频波形流（ECG/PPG，见 [spec 0003](specs/0003-waveform-high-throughput.spec.md)）|
-| 11–31 | 保留 | 置 0，向前兼容（未知位忽略）|
+| 11 | `PROTOBUF_PAYLOAD` | 支持结构化协议负载的 Protobuf 编码分支（首批用于 `HELLO_ACK` / `INFO` 等低风险响应）|
+| 12–31 | 保留 | 置 0，向前兼容（未知位忽略）|
 
 > 示例：支持心率+RR+电量+接触+可调采样率 → `0b0010_1111` = `0x0000002F`。
 
@@ -232,14 +233,15 @@ Dev → App: HELLO_ACK { protoVersion:1, capabilities, model, fw }
 
 > 说明本项目"自定义协议栈"与业界常用 **Protobuf** 的关系（JD 点名 Protobuf）。二者不冲突：**分层可组合**。
 
-- **L2 分帧/可靠传输层保持不变**（分片、seq、CRC——见 §4）；变化的只是 **L4 应用数据的负载编码**。
+- **L2 分帧/可靠传输层保持不变**（分片、seq、CRC——见 §4）；变化的是 **协议负载编码分支**，不改变 GATT / 分帧 / ACK / CRC。
 - **v1 默认**：L4 用**自定义 TLV**（字节紧凑、无依赖、适合 MCU）。
-- **可选 Protobuf 承载**：把 L4 的 `Frame Body` 定义为一段 **Protobuf 序列化字节**（`.proto` 与固件/算法共享 schema，生成 Swift/嵌入式代码）。
+- **可选 Protobuf 承载**：把结构化协议负载定义为一段 **Protobuf 序列化字节**（`.proto` 与固件/算法共享 schema，生成 Swift/嵌入式代码）。
   - 适用：字段多、演进快、跨端团队协作，Protobuf 的**向前/后兼容**与代码生成优势明显。
   - 跨端含义：若未来需要与 **Android** 共用应用层消息模型，优先共享 `.proto` schema；iOS / Android / FW 共同遵守同一份字段契约，而 **BLE GATT + L2 分帧/可靠传输** 仍保持本协议定义。
   - 取舍：Protobuf 有一定体积/解析开销，MCU 侧需 nanopb 等轻量实现。
-- **协商方式**：在 `HELLO`/`capabilities` 增一位 `PROTOBUF_PAYLOAD` 声明支持；`Frame` 的 `Type` 可用一个取值区分"TLV 负载 / Protobuf 负载"，实现**两种编码共存**。
-- **落点**：`.proto` schema 放 `proto/` 目录（见 `08`）；此为**可选实现**，v1 以 TLV 为准。
+- **首批落地范围**：仅用于低风险、结构化、低吞吐的响应消息，例如 `HELLO_ACK` / `INFO` 的载荷；`HELLO` 请求、波形块与 OTA 数据块继续保持 TLV / 自定义紧凑编码。
+- **协商方式**：在 `HELLO`/`capabilities` 中使用 **bit11 `PROTOBUF_PAYLOAD`** 声明支持；双方都支持时，设备端可发送 `FrameType=0x05` 的 `protobufCommand` 帧承载结构化响应，否则回退 TLV `command` 帧。
+- **落点**：`.proto` schema 放 `proto/` 目录（见 `08`）；此为**可选实现**，v1 以 TLV 为准，Protobuf 作为灰度分支与 TLV 共存。
 
 #### 6.2.1 时间戳基准（v1 已定）
 

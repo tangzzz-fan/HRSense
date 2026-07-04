@@ -283,6 +283,6 @@ public final class DeviceRepositoryImpl: DeviceRepository, @unchecked Sendable {
 
 /// App-side capabilities to declare in HELLO.
 private enum AppCapabilities {
-    /// v1 app: heart rate + RR intervals + OTA + waveform support
-    static let current: UInt32 = (1 << 0) | (1 << 1) | (1 << 2) | (1 << 9) | (1 << 10)
+    /// v1 app: heart rate + RR intervals + battery + OTA + waveform + protobuf
+    static let current: UInt32 = (1 << 0) | (1 << 1) | (1 << 2) | (1 << 9) | (1 << 10) | (1 << 11)
 }

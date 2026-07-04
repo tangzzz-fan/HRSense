@@ -12,6 +12,7 @@ public final class CommandProcessor: @unchecked Sendable {
     private var onStreamStart: (([UInt8]) -> Void)?
     private var onStreamStop: (() -> Void)?
     private var streamSeq: UInt8 = 0
+    private var protobufPayloadNegotiated = false
 
     public init(
         config: SimulatorConfig,
@@ -48,7 +49,7 @@ public final class CommandProcessor: @unchecked Sendable {
 
         switch command.opCode {
         case .hello:
-            return handleHello(seq: seq, mtu: mtu)
+            return handleHello(command: command, seq: seq, mtu: mtu)
 
         case .getInfo:
             return handleGetInfo(seq: seq, mtu: mtu)
@@ -76,6 +77,7 @@ public final class CommandProcessor: @unchecked Sendable {
     public func reset() {
         state = .advertising
         streamSeq = 0
+        protobufPayloadNegotiated = false
     }
 
     /// Advance to connected state.
@@ -89,6 +91,7 @@ public final class CommandProcessor: @unchecked Sendable {
     public func didDisconnect() {
         onStreamStop?()
         state = .advertising
+        protobufPayloadNegotiated = false
     }
 
     public func updateFirmwareVersion(_ firmwareVersion: String) {
@@ -104,27 +107,34 @@ public final class CommandProcessor: @unchecked Sendable {
 
     // MARK: - Private handlers
 
-    private func handleHello(seq: UInt8, mtu: Int) -> [Data] {
+    private func handleHello(command: Command, seq: UInt8, mtu: Int) -> [Data] {
         state = state.transition(on: .handshakeCompleted)
         let caps = HRSenseProtocol.Capabilities(rawValue: config.capabilities)
+        let appCaps = capabilities(from: command)
+        protobufPayloadNegotiated = appCaps.contains(.protobufPayload) && caps.contains(.protobufPayload)
         let response = Command.helloAck(
             version: config.protocolVersion,
             capabilities: caps,
             model: config.model,
             firmwareVersion: config.firmwareVersion
         )
+        if protobufPayloadNegotiated {
+            return (try? encodeProtobufCommand(response, seq: seq, mtu: mtu)) ?? encodeCommand(response, seq: seq, mtu: mtu)
+        }
         return encodeCommand(response, seq: seq, mtu: mtu)
     }
 
     private func handleGetInfo(seq: UInt8, mtu: Int) -> [Data] {
-        // Return a HELLO_ACK-style response as INFO
         let caps = HRSenseProtocol.Capabilities(rawValue: config.capabilities)
-        let response = Command.helloAck(
+        let response = Command.info(
             version: config.protocolVersion,
             capabilities: caps,
             model: config.model,
             firmwareVersion: config.firmwareVersion
         )
+        if protobufPayloadNegotiated {
+            return (try? encodeProtobufCommand(response, seq: seq, mtu: mtu)) ?? encodeCommand(response, seq: seq, mtu: mtu)
+        }
         return encodeCommand(response, seq: seq, mtu: mtu)
     }
 
@@ -154,5 +164,12 @@ public final class CommandProcessor: @unchecked Sendable {
     private func sendError(opcode: UInt8, reason: String, seq: UInt8, mtu: Int) -> [Data] {
         let ack = ACKPayload(seq: seq, opcode: opcode, status: 0x01)
         return encodeACK(ack, seq: seq, mtu: mtu)
+    }
+
+    private func capabilities(from command: Command) -> HRSenseProtocol.Capabilities {
+        guard let capabilityBytes = command.params.first(where: { $0.tag == .capabilities })?.value else {
+            return []
+        }
+        return HRSenseProtocol.Capabilities(bytesLE: capabilityBytes)
     }
 }

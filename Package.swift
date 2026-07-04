@@ -17,9 +17,15 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/tangzzz-fan/TGReduxKit.git", from: "2.0.0"),
+        .package(url: "https://github.com/apple/swift-protobuf.git", from: "1.38.1"),
     ],
     targets: [
-        .target(name: "HRSenseProtocol"),
+        .target(
+            name: "HRSenseProtocol",
+            dependencies: [
+                .product(name: "SwiftProtobuf", package: "swift-protobuf"),
+            ]
+        ),
         .target(name: "HRSenseCore"),
         .target(name: "HRSenseComputeCxx",
                 publicHeadersPath: "include",

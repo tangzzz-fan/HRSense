@@ -8,6 +8,12 @@ public func encodeCommand(_ cmd: Command, seq: UInt8, mtu: Int) -> [Data] {
     return FrameEncoder.encode(type: .command, body: body, seq: seq, mtu: mtu)
 }
 
+/// Convenience encoder: Command → GATT fragments using Protobuf payload encoding.
+public func encodeProtobufCommand(_ cmd: Command, seq: UInt8, mtu: Int) throws -> [Data] {
+    let body = try ProtobufCommandCodec.encode(cmd)
+    return FrameEncoder.encode(type: .protobufCommand, body: body, seq: seq, mtu: mtu)
+}
+
 /// Convenience encoder: DeviceSample → GATT fragments.
 public func encodeData(_ sample: DeviceSample, seq: UInt8, mtu: Int) -> [Data] {
     let body = DataCodec.encode(sample)

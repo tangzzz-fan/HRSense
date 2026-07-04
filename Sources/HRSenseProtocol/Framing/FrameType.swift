@@ -5,9 +5,11 @@
 ///   - data    = 0x02 (L4 application data layer)
 ///   - ack     = 0x03 (ACK frame)
 ///   - event   = 0x04 (device event frame)
+///   - protobufCommand = 0x05 (structured command payload encoded with Protobuf)
 public enum FrameType: UInt8, Equatable, Sendable, CaseIterable {
     case command = 0x01
     case data    = 0x02
     case ack     = 0x03
     case event   = 0x04
+    case protobufCommand = 0x05
 }

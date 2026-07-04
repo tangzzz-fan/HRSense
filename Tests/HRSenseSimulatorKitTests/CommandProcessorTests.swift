@@ -25,6 +25,53 @@ final class CommandProcessorTests: XCTestCase {
         XCTAssertTrue(decodedCmd?.flags.isResponse ?? false)
     }
 
+    func test_helloNegotiatesProtobufHelloAckWhenPeerSupportsCapability() {
+        let config = SimulatorConfig()
+        let processor = CommandProcessor(config: config)
+        let cmd = Command.hello(capabilities: [.heartRate, .protobufPayload])
+
+        let responses = processor.process(command: cmd, seq: 1)
+
+        XCTAssertFalse(responses.isEmpty)
+        let assembler = FrameAssembler()
+        var decodedCmd: Command?
+        for frag in responses {
+            let frames = assembler.feed(frag)
+            if case let .command(c) = frames.first {
+                decodedCmd = c
+            }
+        }
+        XCTAssertEqual(decodedCmd?.opCode, .helloAck)
+        XCTAssertEqual(
+            decodedCmd?.params.first(where: { $0.tag == .capabilities })?.value,
+            Capabilities(rawValue: config.capabilities).bytesLE
+        )
+    }
+
+    func test_getInfoReturnsInfoOpcodeAfterHandshake() {
+        let config = SimulatorConfig()
+        let processor = CommandProcessor(config: config)
+        processor.didConnect()
+        _ = processor.process(command: Command.hello(capabilities: [.heartRate]), seq: 0)
+
+        let responses = processor.process(
+            command: Command(opCode: .getInfo, flags: CommandFlags(isResponse: false), params: []),
+            seq: 1
+        )
+
+        XCTAssertFalse(responses.isEmpty)
+        let assembler = FrameAssembler()
+        var decodedCmd: Command?
+        for frag in responses {
+            let frames = assembler.feed(frag)
+            if case let .command(c) = frames.first {
+                decodedCmd = c
+            }
+        }
+        XCTAssertEqual(decodedCmd?.opCode, .info)
+        XCTAssertTrue(decodedCmd?.flags.isResponse ?? false)
+    }
+
     func test_helloTransitionsToHandshakeDone() {
         let processor = CommandProcessor(config: SimulatorConfig())
         processor.didConnect()  // BLE connection must precede command writes
