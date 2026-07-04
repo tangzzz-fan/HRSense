@@ -88,26 +88,27 @@
 ## 4. 设计流程
 
 ```mermaid
-flowchart TD
-    A[RootView onAppear] --> B[dispatch startScanning]
-    B --> C[ConnectionMiddleware 调用 DeviceRepository.startScanning]
-    C --> D[BLECentralDataSource 扫描并发现 simulator]
-    D --> E[dispatch deviceDiscovered]
-    E --> F[Reducer 写入 discoveredDevices]
-    F --> G[RootView 展示设备列表]
-    G --> H[用户点击 Connect]
-    H --> I[dispatch connect(deviceID)]
-    I --> J[ConnectionMiddleware 调用 connect + performHandshake]
-    J --> K[HELLO -> HELLO_ACK -> START_STREAM]
-    K --> L[BLECentralDataSource.completeHandshake]
-    L --> M[connectionStateChanged(.connected)]
-    M --> N[BLEStreamMiddleware / WaveformMiddleware 启动]
+sequenceDiagram
+    participant UI as RootView (SwiftUI)
+    participant Store as Redux Store
+    participant CM as ConnectionMiddleware
+    participant BLE as BLECentralDataSource
 
-    style A fill:#bbdefb,color:#0d47a1
-    style D fill:#bbdefb,color:#0d47a1
-    style G fill:#fff3e0,color:#e65100
-    style K fill:#fff3e0,color:#e65100
-    style N fill:#c8e6c9,color:#1a5e20
+    UI->>Store: dispatch(startScanning)
+    Store->>CM: Action 流经 Middleware
+    CM->>BLE: DeviceRepository.startScanning()
+    BLE-->>CM: 发现 simulator
+    CM->>Store: dispatch(deviceDiscovered)
+    Store->>Store: Reducer 更新 discoveredDevices
+    Store-->>UI: 状态变更 → 展示列表
+    UI->>Store: dispatch(connect(deviceID))
+    Store->>CM: Action 流经 Middleware
+    CM->>BLE: connect() + performHandshake()
+    BLE->>BLE: HELLO → HELLO_ACK → START_STREAM
+    BLE-->>CM: completeHandshake()
+    CM->>Store: dispatch(connectionStateChanged(.connected))
+    Store->>Store: Reducer 更新状态
+    Store-->>BLE: BLEStreamMiddleware 启动
 ```
 
 ## 5. 模块拆分与时间
