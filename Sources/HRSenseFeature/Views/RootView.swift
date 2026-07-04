@@ -25,7 +25,7 @@ public struct RootView: View {
             .padding()
         }
         .onAppear {
-            store.dispatch(.startScanning)
+            store.dispatch(.appLaunched)
             store.dispatch(.sleep(.historyLoadRequested(limit: 7)))
         }
     }
@@ -41,7 +41,7 @@ public struct RootView: View {
             Text(connectionLabel)
                 .font(.caption)
             Spacer()
-            if store.state.connection == .connected {
+            if store.state.connection == .connected || store.state.connection == .restoredConnected {
                 Button("Disconnect") {
                     store.dispatch(.disconnect)
                 }
@@ -60,7 +60,7 @@ public struct RootView: View {
 
     @ViewBuilder
     private var discoveredDevicesView: some View {
-        if store.state.connection != .connected && !store.state.discoveredDevices.isEmpty {
+        if store.state.connection != .connected && store.state.connection != .restoredConnected && !store.state.discoveredDevices.isEmpty {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Available Devices")
                     .font(.headline)
@@ -348,9 +348,9 @@ public struct RootView: View {
         case .connecting: return "Connecting..."
         case .handshaking: return "Handshaking..."
         case .connected: return "Connected"
-        case .restored: return "Restoring..."
-        case .restoredValidating: return "Validating Restore..."
-        case .restoredConnected: return "Restored"
+        case .restored: return "Restoring Previous Device..."
+        case .restoredValidating: return "Validating Previous Device..."
+        case .restoredConnected: return "Connected"
         case .disconnecting: return "Disconnecting..."
         case .disconnected: return "Disconnected"
         }

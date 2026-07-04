@@ -6,6 +6,7 @@ import HRSenseCore
 /// Extended incrementally in M8 (compute/inference) and M10 (lifecycle/restore).
 public enum Action: Equatable, Sendable {
     // MARK: App lifecycle (M10)
+    case appLaunched
     case didEnterBackground
     case willEnterForeground
     case restoreInitiated(peripheralIDs: [UUID])
@@ -62,6 +63,7 @@ public enum Action: Equatable, Sendable {
 extension Action: CustomStringConvertible {
     public var description: String {
         switch self {
+        case .appLaunched: return "appLaunched"
         case .didEnterBackground: return "didEnterBackground"
         case .willEnterForeground: return "willEnterForeground"
         case .restoreInitiated(let ids): return "restoreInitiated(\(ids.count) peripherals)"

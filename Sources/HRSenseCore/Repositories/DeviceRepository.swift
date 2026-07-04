@@ -50,5 +50,5 @@ public protocol DeviceRepository: AnyObject, Sendable {
     /// Resume a CoreBluetooth-restored BLE session by rediscovering services,
     /// validating the restored peripheral identity, and re-running handshake
     /// if needed.
-    func restoreConnection(cachedDevice: DeviceInfo?) async throws -> DeviceInfo
+    func restoreConnection(context: RestorationContext?) async throws -> DeviceInfo
 }

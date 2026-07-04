@@ -29,7 +29,11 @@ public enum AppComposition {
 
         let waveformBuffer = WaveformRingBuffer()
         let bleDataSource = BLECentralDataSource(waveformRingBuffer: waveformBuffer)
-        let deviceRepo = DeviceRepositoryImpl(bleDataSource: bleDataSource)
+        let restorationContextStore = UserDefaultsRestorationContextStore()
+        let deviceRepo = DeviceRepositoryImpl(
+            bleDataSource: bleDataSource,
+            restorationContextStore: restorationContextStore
+        )
         let computeRepo = ComputeRepositoryImpl()
         let inferenceRepo = InferenceRepositoryImpl()
         let sleepInferenceRepo = SleepInferenceRepositoryImpl()
@@ -59,6 +63,7 @@ public enum AppComposition {
             makeBackgroundMiddleware(),
             makeConnectionMiddleware(
                 deviceRepo: deviceRepo,
+                restorationContextStore: restorationContextStore,
                 backoffProvider: { [bleDataSource] in
                     bleDataSource.connectionStateMachine.nextBackoff()
                 }

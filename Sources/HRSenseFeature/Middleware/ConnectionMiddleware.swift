@@ -3,6 +3,37 @@ import HRSenseCore
 import HRSenseProtocol
 import TGReduxKit
 
+private actor RestorationBootstrapCoordinator {
+    private var startupScanTask: Task<Void, Never>?
+    private var restoreInProgress = false
+
+    func installStartupFallbackTask(_ task: Task<Void, Never>) {
+        startupScanTask?.cancel()
+        startupScanTask = task
+        restoreInProgress = false
+    }
+
+    func cancelStartupFallback() {
+        startupScanTask?.cancel()
+        startupScanTask = nil
+    }
+
+    func beginRestoreAttempt() {
+        startupScanTask?.cancel()
+        startupScanTask = nil
+        restoreInProgress = true
+    }
+
+    func finishRestoreAttempt() {
+        restoreInProgress = false
+    }
+
+    func resolvePendingFallback() -> Bool {
+        startupScanTask = nil
+        return !restoreInProgress
+    }
+}
+
 /// Middleware that orchestrates BLE connection lifecycle.
 ///
 /// Subscribes to the DeviceRepository's connection state stream and dispatches
@@ -16,11 +47,32 @@ import TGReduxKit
 ///     backoff (1s → 2s → 4s → … → 60s capped) and reset on successful connection.
 public func makeConnectionMiddleware(
     deviceRepo: any DeviceRepository,
-    backoffProvider: (@Sendable () -> Int)?
+    restorationContextStore: any RestorationContextStore,
+    backoffProvider: (@Sendable () -> Int)?,
+    restorationGracePeriod: TimeInterval = 0.75
 ) -> Middleware<AppState, Action> {
     var streamTaskStarted = false
+    let bootstrapCoordinator = RestorationBootstrapCoordinator()
 
     return { store, action, next in
+        let restorationGraceNanoseconds = UInt64(restorationGracePeriod * 1_000_000_000)
+
+        func canStartScanning(for state: AppState) -> Bool {
+            switch state.connection {
+            case .idle, .disconnected, .scanning:
+                return state.lifecycle != .restoring
+            case .connecting, .handshaking, .connected, .restored, .restoredValidating, .restoredConnected, .disconnecting:
+                return false
+            }
+        }
+
+        func dispatchStartupScanIfNeeded() async {
+            await MainActor.run {
+                guard canStartScanning(for: store.state) else { return }
+                store.dispatch(.startScanning)
+            }
+        }
+
         // One-time: subscribe to BLE connection state stream
         if !streamTaskStarted {
             streamTaskStarted = true
@@ -34,6 +86,13 @@ public func makeConnectionMiddleware(
             Task {
                 for await peripheralIDs in deviceRepo.restoredPeripheralIDsStream {
                     guard !peripheralIDs.isEmpty else { continue }
+                    guard restorationContextStore.load() != nil else {
+                        HRSenseLogging.info(.state, "Ignoring BLE restoration without persisted eligibility context")
+                        await bootstrapCoordinator.cancelStartupFallback()
+                        await dispatchStartupScanIfNeeded()
+                        continue
+                    }
+                    await bootstrapCoordinator.beginRestoreAttempt()
                     await MainActor.run {
                         store.dispatch(.restoreInitiated(peripheralIDs: peripheralIDs))
                     }
@@ -57,12 +116,33 @@ public func makeConnectionMiddleware(
         }
 
         switch action {
+        case .appLaunched:
+            next(action)
+            if restorationContextStore.load() == nil {
+                Task {
+                    await bootstrapCoordinator.cancelStartupFallback()
+                    await dispatchStartupScanIfNeeded()
+                }
+            } else {
+                Task {
+                    let fallbackTask = Task {
+                        try? await Task.sleep(nanoseconds: restorationGraceNanoseconds)
+                        guard !Task.isCancelled else { return }
+                        let shouldFallback = await bootstrapCoordinator.resolvePendingFallback()
+                        guard shouldFallback else { return }
+                        await dispatchStartupScanIfNeeded()
+                    }
+                    await bootstrapCoordinator.installStartupFallbackTask(fallbackTask)
+                }
+            }
+
         case .restoreInitiated(let peripheralIDs):
             next(action)
-            let cachedDevice = store.state.device
+            let context = restorationContextStore.load()
             Task {
+                defer { Task { await bootstrapCoordinator.finishRestoreAttempt() } }
                 do {
-                    _ = try await deviceRepo.restoreConnection(cachedDevice: cachedDevice)
+                    _ = try await deviceRepo.restoreConnection(context: context)
                     await MainActor.run {
                         store.dispatch(.restoreConnectionRestored(peripheralIDs: peripheralIDs))
                     }
@@ -77,13 +157,16 @@ public func makeConnectionMiddleware(
                     }
                     await MainActor.run {
                         store.dispatch(.restoreFailed(reason: message))
+                        store.dispatch(.startScanning)
                     }
                 }
             }
 
         case .startScanning:
+            guard canStartScanning(for: store.state) else { return }
             next(action)
             Task {
+                await bootstrapCoordinator.cancelStartupFallback()
                 await deviceRepo.startScanning()
             }
 
@@ -124,6 +207,18 @@ public func makeConnectionMiddleware(
         case .connectionStateChanged(.handshaking):
             next(action)
             // Handshake is triggered by the .connect handler above; nothing extra needed here
+
+        case .restoreConnectionRestored:
+            next(action)
+            Task {
+                await bootstrapCoordinator.finishRestoreAttempt()
+            }
+
+        case .restoreFailed:
+            next(action)
+            Task {
+                await bootstrapCoordinator.finishRestoreAttempt()
+            }
 
         default:
             next(action)

@@ -6,11 +6,23 @@ import TGReduxKit
 @MainActor
 final class ConnectionMiddlewareTests: XCTestCase {
 
-    func makeStore(repo: FakeDeviceRepository, backoff: (@Sendable () -> Int)? = nil) -> Store<AppState, Action> {
+    func makeStore(
+        repo: FakeDeviceRepository,
+        restorationContextStore: FakeRestorationContextStore = FakeRestorationContextStore(),
+        backoff: (@Sendable () -> Int)? = nil,
+        restorationGracePeriod: TimeInterval = 0.01
+    ) -> Store<AppState, Action> {
         Store(
             initialState: AppState(),
             reducer: AppReducer.reduce,
-            middlewares: [makeConnectionMiddleware(deviceRepo: repo, backoffProvider: backoff)]
+            middlewares: [
+                makeConnectionMiddleware(
+                    deviceRepo: repo,
+                    restorationContextStore: restorationContextStore,
+                    backoffProvider: backoff,
+                    restorationGracePeriod: restorationGracePeriod
+                )
+            ]
         )
     }
 
@@ -31,6 +43,45 @@ final class ConnectionMiddlewareTests: XCTestCase {
         let store = makeStore(repo: repo)
         store.dispatch(.stopScanning)
         XCTAssertEqual(store.state.connection, .idle)
+    }
+
+    func test_appLaunched_withoutRestorationContext_startsScanningImmediately() async {
+        let repo = FakeDeviceRepository()
+        let restorationContextStore = FakeRestorationContextStore()
+        let store = makeStore(repo: repo, restorationContextStore: restorationContextStore)
+
+        store.dispatch(.appLaunched)
+
+        await assertEventually {
+            repo.scanCallCount == 1 && store.state.connection == .scanning
+        }
+        XCTAssertEqual(repo.scanCallCount, 1)
+        XCTAssertEqual(store.state.connection, .scanning)
+    }
+
+    func test_appLaunched_withRestorationContext_waitsThenFallsBackToScan() async {
+        let repo = FakeDeviceRepository()
+        let restorationContextStore = FakeRestorationContextStore()
+        restorationContextStore.context = RestorationContext(
+            peripheralIdentifier: UUID(),
+            model: "M1",
+            protocolVersion: 1,
+            capabilities: 1,
+            lastSuccessfulHandshakeAt: Date()
+        )
+        let store = makeStore(
+            repo: repo,
+            restorationContextStore: restorationContextStore,
+            restorationGracePeriod: 0.01
+        )
+
+        store.dispatch(.appLaunched)
+
+        await assertEventually {
+            repo.scanCallCount == 1 && store.state.connection == .scanning
+        }
+        XCTAssertEqual(repo.scanCallCount, 1)
+        XCTAssertEqual(store.state.connection, .scanning)
     }
 
     // MARK: - Connection
@@ -104,10 +155,18 @@ final class ConnectionMiddlewareTests: XCTestCase {
 
     func test_restoredPeripheralIDsStream_runsRestoreFlow() async {
         let repo = FakeDeviceRepository()
-        let store = makeStore(repo: repo)
+        let restorationContextStore = FakeRestorationContextStore()
+        restorationContextStore.context = RestorationContext(
+            peripheralIdentifier: UUID(),
+            model: "M1",
+            protocolVersion: 1,
+            capabilities: 1,
+            lastSuccessfulHandshakeAt: Date()
+        )
+        let store = makeStore(repo: repo, restorationContextStore: restorationContextStore)
         let restoredID = UUID()
 
-        store.dispatch(.startScanning)
+        store.dispatch(.appLaunched)
         repo.emitRestoredPeripheralIDs([restoredID])
         await assertEventually {
             repo.restoreCallCount == 1 && store.state.connection == .restoredConnected
@@ -121,17 +180,39 @@ final class ConnectionMiddlewareTests: XCTestCase {
     func test_restoreFailure_dispatchesRestoreFailed() async {
         let repo = FakeDeviceRepository()
         repo.restoreResult = .failure(AppError.handshakeFailed(reason: "Restored device model mismatch"))
-        let store = makeStore(repo: repo)
+        let restorationContextStore = FakeRestorationContextStore()
+        restorationContextStore.context = RestorationContext(
+            peripheralIdentifier: UUID(),
+            model: "M1",
+            protocolVersion: 1,
+            capabilities: 1,
+            lastSuccessfulHandshakeAt: Date()
+        )
+        let store = makeStore(repo: repo, restorationContextStore: restorationContextStore)
 
-        store.dispatch(.startScanning)
+        store.dispatch(.appLaunched)
         repo.emitRestoredPeripheralIDs([UUID()])
         await assertEventually {
-            repo.restoreCallCount == 1 && store.state.connection == .disconnected && store.state.error != nil
+            repo.restoreCallCount == 1 && store.state.connection == .scanning && store.state.error != nil
         }
 
         XCTAssertEqual(repo.restoreCallCount, 1)
-        XCTAssertEqual(store.state.connection, .disconnected)
+        XCTAssertEqual(store.state.connection, .scanning)
         XCTAssertNotNil(store.state.error)
+    }
+
+    func test_restoredPeripheralIDs_withoutContext_areIgnoredAndFallbackToScan() async {
+        let repo = FakeDeviceRepository()
+        let store = makeStore(repo: repo)
+
+        store.dispatch(.appLaunched)
+        repo.emitRestoredPeripheralIDs([UUID()])
+
+        await assertEventually {
+            repo.restoreCallCount == 0 && repo.scanCallCount >= 1 && store.state.connection == .scanning
+        }
+        XCTAssertEqual(repo.restoreCallCount, 0)
+        XCTAssertEqual(store.state.connection, .scanning)
     }
 
     // MARK: - Reconnection with backoff

@@ -18,6 +18,12 @@ final class ReducerTests: XCTestCase {
         XCTAssertEqual(state.lifecycle, .active)
     }
 
+    func test_willEnterForeground_doesNotOverrideRestoring() {
+        var state = AppState(lifecycle: .restoring)
+        AppReducer.reduce(state: &state, action: .willEnterForeground)
+        XCTAssertEqual(state.lifecycle, .restoring)
+    }
+
     func test_restoreInitiated_setsRestoringAndRestoredConnection() {
         var state = AppState(connection: .connected, error: .connectionLost)
         AppReducer.reduce(state: &state, action: .restoreInitiated(peripheralIDs: [UUID()]))
@@ -74,6 +80,13 @@ final class ReducerTests: XCTestCase {
         AppReducer.reduce(state: &state, action: .connectionStateChanged(.connected))
         XCTAssertNil(state.error)
         XCTAssertEqual(state.connection, .connected)
+    }
+
+    func test_connectionStateChanged_restoredConnected_clearsError() {
+        var state = AppState(error: .connectionTimeout)
+        AppReducer.reduce(state: &state, action: .connectionStateChanged(.restoredConnected))
+        XCTAssertNil(state.error)
+        XCTAssertEqual(state.connection, .restoredConnected)
     }
 
     func test_connectionStateChanged_disconnected_clearsDevice() {

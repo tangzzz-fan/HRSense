@@ -86,7 +86,7 @@ final class FakeDeviceRepository: DeviceRepository, @unchecked Sendable {
         }
     }
 
-    func restoreConnection(cachedDevice: DeviceInfo?) async throws -> DeviceInfo {
+    func restoreConnection(context: RestorationContext?) async throws -> DeviceInfo {
         restoreCallCount += 1
         switch restoreResult {
         case .success(let info):
@@ -118,6 +118,26 @@ final class FakeDeviceRepository: DeviceRepository, @unchecked Sendable {
 
     func emitRestoredPeripheralIDs(_ ids: [UUID]) {
         restoreCont.yield(ids)
+    }
+}
+
+final class FakeRestorationContextStore: RestorationContextStore, @unchecked Sendable {
+    var context: RestorationContext?
+    private(set) var savedContexts: [RestorationContext] = []
+    private(set) var clearCallCount = 0
+
+    func load() -> RestorationContext? {
+        context
+    }
+
+    func save(_ context: RestorationContext) {
+        self.context = context
+        savedContexts.append(context)
+    }
+
+    func clear() {
+        context = nil
+        clearCallCount += 1
     }
 }
 

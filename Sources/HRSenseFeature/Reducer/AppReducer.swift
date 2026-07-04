@@ -15,11 +15,16 @@ import HRSenseCore
 public enum AppReducer {
     public static func reduce(state: inout AppState, action: Action) {
         switch action {
+        case .appLaunched:
+            break
+
         case .didEnterBackground:
             state.lifecycle = .background
 
         case .willEnterForeground:
-            state.lifecycle = .active
+            if state.lifecycle != .restoring {
+                state.lifecycle = .active
+            }
 
         case .restoreInitiated:
             state.lifecycle = .restoring
@@ -59,7 +64,7 @@ public enum AppReducer {
 
         case .connectionStateChanged(let newState):
             state.connection = newState
-            if newState == .connected {
+            if newState == .connected || newState == .restoredConnected {
                 state.error = nil
             }
             if newState == .disconnected {

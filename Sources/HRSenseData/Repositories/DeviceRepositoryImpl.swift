@@ -11,6 +11,7 @@ import HRSenseProtocol
 public final class DeviceRepositoryImpl: DeviceRepository, @unchecked Sendable {
 
     private let bleDataSource: BLECentralDataSource
+    private let restorationContextStore: any RestorationContextStore
     public let metricsCollector: MetricsCollector
 
     public var connectionState: ConnectionState {
@@ -36,8 +37,12 @@ public final class DeviceRepositoryImpl: DeviceRepository, @unchecked Sendable {
     public let deviceInfoStream: AsyncStream<DeviceInfo>
     private let deviceInfoContinuation: AsyncStream<DeviceInfo>.Continuation
 
-    public init(bleDataSource: BLECentralDataSource) {
+    public init(
+        bleDataSource: BLECentralDataSource,
+        restorationContextStore: any RestorationContextStore
+    ) {
         self.bleDataSource = bleDataSource
+        self.restorationContextStore = restorationContextStore
         self.metricsCollector = bleDataSource.metricsCollector
         var cont: AsyncStream<DeviceInfo>.Continuation!
         self.deviceInfoStream = AsyncStream { cont = $0 }
@@ -141,6 +146,7 @@ public final class DeviceRepositoryImpl: DeviceRepository, @unchecked Sendable {
         )
         bleDataSource.dataParser.markT0()
         deviceInfoContinuation.yield(deviceInfo)
+        persistRestorationContext(for: deviceInfo)
         metricsCollector.recordConnectionSuccess()
         HRSenseLogging.info(.protoCmd, "HANDSHAKE: device=\(model) fw=\(fw) version=\(version) caps=0x\(String(caps.rawValue, radix: 16))")
 
@@ -155,7 +161,7 @@ public final class DeviceRepositoryImpl: DeviceRepository, @unchecked Sendable {
         return deviceInfo
     }
 
-    public func restoreConnection(cachedDevice: DeviceInfo?) async throws -> DeviceInfo {
+    public func restoreConnection(context: RestorationContext?) async throws -> DeviceInfo {
         metricsCollector.recordConnectionAttempt()
 
         guard bleDataSource.connectedPeripheralIdentifier != nil else {
@@ -164,14 +170,14 @@ public final class DeviceRepositoryImpl: DeviceRepository, @unchecked Sendable {
 
         bleDataSource.beginRestoredConnectionValidation()
 
-        let restoredInfo = try await readRestoredDeviceInfo(timeout: 3.0)
-        if let cachedDevice, let restoredInfo {
-            try validateRestoredDevice(restoredInfo, against: cachedDevice)
+        let restoredInfo = try await readRestoredDeviceInfo(timeout: 3.0, context: context)
+        if let context, let restoredInfo {
+            try validateRestoredDevice(restoredInfo, against: context)
         }
 
         let deviceInfo = try await performHandshake()
-        if let cachedDevice {
-            try validateRestoredDevice(deviceInfo, against: cachedDevice)
+        if let context {
+            try validateRestoredDevice(deviceInfo, against: context)
         }
 
         bleDataSource.completeRestoration(with: deviceInfo)
@@ -199,12 +205,15 @@ public final class DeviceRepositoryImpl: DeviceRepository, @unchecked Sendable {
         throw AppError.connectionTimeout
     }
 
-    private func readRestoredDeviceInfo(timeout: TimeInterval) async throws -> DeviceInfo? {
+    private func readRestoredDeviceInfo(
+        timeout: TimeInterval,
+        context: RestorationContext?
+    ) async throws -> DeviceInfo? {
         let deadline = ContinuousClock.now + .seconds(timeout)
 
         while ContinuousClock.now < deadline {
             if let data = bleDataSource.latestDeviceInfoData,
-               let info = parseRestoredDeviceInfo(from: data) {
+               let info = parseRestoredDeviceInfo(from: data, context: context) {
                 return info
             }
             try await Task.sleep(nanoseconds: 50_000_000)
@@ -213,7 +222,10 @@ public final class DeviceRepositoryImpl: DeviceRepository, @unchecked Sendable {
         return nil
     }
 
-    private func parseRestoredDeviceInfo(from data: Data) -> DeviceInfo? {
+    private func parseRestoredDeviceInfo(
+        from data: Data,
+        context: RestorationContext?
+    ) -> DeviceInfo? {
         guard let rawObject = try? JSONSerialization.jsonObject(with: data),
               let object = rawObject as? [String: String] else {
             return nil
@@ -231,30 +243,41 @@ public final class DeviceRepositoryImpl: DeviceRepository, @unchecked Sendable {
             model: model,
             firmwareVersion: firmwareVersion,
             protocolVersion: protocolVersion,
-            capabilities: bleDataSource.connectedDeviceInfo?.capabilities ?? 0
+            capabilities: context?.capabilities ?? bleDataSource.connectedDeviceInfo?.capabilities ?? 0
         )
     }
 
-    private func validateRestoredDevice(_ restoredDevice: DeviceInfo, against cachedDevice: DeviceInfo) throws {
-        guard restoredDevice.peripheralIdentifier == cachedDevice.peripheralIdentifier else {
+    private func validateRestoredDevice(_ restoredDevice: DeviceInfo, against context: RestorationContext) throws {
+        guard restoredDevice.peripheralIdentifier == context.peripheralIdentifier else {
             throw AppError.handshakeFailed(reason: "Restored peripheral identifier mismatch")
         }
 
-        if !cachedDevice.model.isEmpty, !restoredDevice.model.isEmpty, restoredDevice.model != cachedDevice.model {
+        if !context.model.isEmpty, !restoredDevice.model.isEmpty, restoredDevice.model != context.model {
             throw AppError.handshakeFailed(reason: "Restored device model mismatch")
         }
 
-        if cachedDevice.protocolVersion != 0,
+        if context.protocolVersion != 0,
            restoredDevice.protocolVersion != 0,
-           restoredDevice.protocolVersion != cachedDevice.protocolVersion {
+           restoredDevice.protocolVersion != context.protocolVersion {
             throw AppError.handshakeFailed(reason: "Restored device protocol version mismatch")
         }
 
-        if cachedDevice.capabilities != 0,
+        if context.capabilities != 0,
            restoredDevice.capabilities != 0,
-           restoredDevice.capabilities != cachedDevice.capabilities {
+           restoredDevice.capabilities != context.capabilities {
             throw AppError.handshakeFailed(reason: "Restored device capabilities mismatch")
         }
+    }
+
+    private func persistRestorationContext(for deviceInfo: DeviceInfo) {
+        let context = RestorationContext(
+            peripheralIdentifier: deviceInfo.peripheralIdentifier,
+            model: deviceInfo.model,
+            protocolVersion: deviceInfo.protocolVersion,
+            capabilities: deviceInfo.capabilities,
+            lastSuccessfulHandshakeAt: Date()
+        )
+        restorationContextStore.save(context)
     }
 }
 
