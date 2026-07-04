@@ -3,7 +3,7 @@
 - **状态**: draft
 - **作者**: TBD
 - **创建日期**: TBD
-- **关联文档**: [../03-ble-gatt-protocol.md](../03-ble-gatt-protocol.md)、[../05-simulator-macos.md](../05-simulator-macos.md)、[../04-app-clean-redux.md](../04-app-clean-redux.md)、[../09-jd-coverage-analysis.md](../09-jd-coverage-analysis.md) §3.1/§3.4
+- **关联文档**: [../03-ble-gatt-protocol.md](../03-ble-gatt-protocol.md)、[../05-simulator-macos.md](../05-simulator-macos.md)、[../04-app-clean-redux.md](../04-app-clean-redux.md)
 
 > 对应 JD "大数据流(实时波形)吞吐" 核心难点。目标：在 **无硬件、macOS 模拟器** 条件下，建立**高通量波形通道**并能**量化吞吐/时延/丢样**，同时保证 UI 高性能不卡。
 

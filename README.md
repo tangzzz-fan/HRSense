@@ -101,6 +101,5 @@ HRSense/
 | [docs/06-coreml-and-compute.md](docs/06-coreml-and-compute.md) | CoreML 与 C++ 计算链路 |
 | [docs/07-ota-dfu.md](docs/07-ota-dfu.md) | OTA/DFU 设计 |
 | [docs/08-project-structure.md](docs/08-project-structure.md) | 项目结构规划文档，包含早期结构设计背景 |
-| [docs/09-jd-coverage-analysis.md](docs/09-jd-coverage-analysis.md) | JD 能力覆盖分析 |
 | [docs/10-observability.md](docs/10-observability.md) | 日志、指标、诊断与监控 |
 | [docs/specs/](docs/specs/) | 细化 spec 目录与模板 |

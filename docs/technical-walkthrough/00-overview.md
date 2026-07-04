@@ -49,6 +49,6 @@ HRSenseProtocol  ←── 双端共享的协议栈（帧、编解码、TLV、CR
 | [17-improvement-suggestions](./17-improvement-suggestions.md) | 改进建议 | 线程安全、性能优化、架构改进、工程化提升、优先级矩阵 |
 | [18-protobuf-integration](./18-protobuf-integration.md) | 跨端集成 | Protobuf schema 设计、代码生成、iOS/Android/FW 集成、版本管理、异常处理 |
 | [19-incident-response](./19-incident-response.md) | 运维体系 | 事故分级、信息收集、分层排查方法论、典型场景排查路径、复盘模板 |
-| [20-interview-questions](./20-interview-questions.md) | 面试参考 | JD 痛点分析、14 道面试题（高级 + 资深）、评估矩阵 |
+| [20-interview-questions](./20-interview-questions.md) | 面试参考 | 项目痛点分析、14 道面试题（高级 + 资深）、评估矩阵 |
 | [21-interview-answers](./21-interview-answers.md) | 面试参考答案 | Q1-Q14 完整参考答案，含项目代码对照和排查路径 |
 | [22-key-flow-diagrams](./22-key-flow-diagrams.md) | 流程图解 | 7 条关键流程 Mermaid 图 + 32 个坑点标注 |

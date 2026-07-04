@@ -3,7 +3,7 @@
 - **状态**: draft
 - **作者**: TBD
 - **创建日期**: TBD
-- **关联文档**: [../04-app-clean-redux.md](../04-app-clean-redux.md)、[../08-project-structure.md](../08-project-structure.md)、[../09-jd-coverage-analysis.md](../09-jd-coverage-analysis.md) §3.3、[0003-waveform-high-throughput.spec.md](0003-waveform-high-throughput.spec.md)
+- **关联文档**: [../04-app-clean-redux.md](../04-app-clean-redux.md)、[../08-project-structure.md](../08-project-structure.md)、[0003-waveform-high-throughput.spec.md](0003-waveform-high-throughput.spec.md)
 
 > 对应 JD "数据计算及可视化——本地存储"。现有设计只有内存环形缓冲，缺持久化。本 spec 定义本地存储选型、数据模型、分层接入与保留策略。
 

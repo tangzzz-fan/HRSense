@@ -226,7 +226,6 @@ The protocol library (`HRSenseProtocol`) must exist before either the app or the
 | CoreML + C++ compute integration | `docs/06-coreml-and-compute.md` |
 | OTA/DFU firmware upgrade design | `docs/07-ota-dfu.md` |
 | Project structure (SPM targets, file layout) | `docs/08-project-structure.md` |
-| JD coverage gap analysis | `docs/09-jd-coverage-analysis.md` |
 | Observability (logging, crash, metrics) | `docs/10-observability.md` |
 | Specs index (detailed implementation specs) | `docs/specs/README.md` |
 
@@ -234,5 +233,4 @@ The protocol library (`HRSenseProtocol`) must exist before either the app or the
 
 - **All design docs are in `docs/`; detailed implementation specs in `docs/specs/`.** If a design question is disputed, check `docs/03-ble-gatt-protocol.md` — it's the source of truth for anything protocol-related.
 - **No code lives directly in the repo root** beyond `Package.swift`. All source code will be under `Sources/<TargetName>/` with corresponding tests under `Tests/`.
-- **JD alignment**: This project is designed to demonstrate skills matching the AxiLab senior iOS engineer JD (see `JD.md`). The gap analysis in `docs/09-jd-coverage-analysis.md` tracks coverage of every JD requirement.
 - **Third-party license tracking**: Any external model weights, datasets, or dependencies must be registered in `THIRD_PARTY_LICENSES.md`. CoreML runtime and `coremltools` are BSD-3-Clause/Apple SDK and introduce no copyleft obligations, but model/dataset sources must be individually checked. Start with self-trained placeholder models to avoid licensing risk.

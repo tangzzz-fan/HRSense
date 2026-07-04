@@ -2,7 +2,7 @@
 
 ## 1. 文档目的
 
-`JD.md` 和 [09-jd-coverage-analysis.md](file:///Users/bigapple/Developments/HRSense/docs/09-jd-coverage-analysis.md) 都提到了 **Protobuf** 这一类跨端协议协作能力。
+项目现有的协议规划与技术文档都已经涉及 **Protobuf** 这一类跨端协议协作能力。
 
 当前项目已经在协议文档中明确：
 
