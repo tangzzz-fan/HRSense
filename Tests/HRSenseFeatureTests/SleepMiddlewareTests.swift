@@ -79,7 +79,9 @@ final class SleepMiddlewareTests: XCTestCase {
         )
 
         store.dispatch(.sleep(.historyLoadRequested(limit: 7)))
-        try? await Task.sleep(nanoseconds: 200_000_000)
+        await assertEventually {
+            store.state.sleep.recentSessions == [session]
+        }
 
         XCTAssertEqual(store.state.sleep.recentSessions, [session])
     }
@@ -132,7 +134,11 @@ final class SleepMiddlewareTests: XCTestCase {
         ))
 
         XCTAssertEqual(store.state.sleep.status, .inferring)
-        try? await Task.sleep(nanoseconds: 300_000_000)
+        await assertEventually {
+            store.state.sleep.status == .ready &&
+            store.state.sleep.lastInference?.stage == .rem &&
+            store.state.sleep.lastPersistedSessionID != nil
+        }
 
         let windowInput = try XCTUnwrap(store.state.sleep.latestWindowInput)
         let session = try XCTUnwrap(store.state.sleep.currentSession)
@@ -184,7 +190,10 @@ final class SleepMiddlewareTests: XCTestCase {
             timestamp: monitoringStart.addingTimeInterval(300)
         )
         store.dispatch(.hrvComputed(HRVMetrics(rmssd: 42, hr: 60)))
-        try? await Task.sleep(nanoseconds: 250_000_000)
+        await assertEventually {
+            sleepRepo.inferenceCallCount == 1 &&
+            store.state.sleep.currentSession?.stages.count == 1
+        }
 
         store.dispatch(.heartRateReceived([
             HeartRateSample(timestamp: monitoringStart.addingTimeInterval(600), heartRate: 57, rrIntervals: [1000]),
@@ -197,7 +206,10 @@ final class SleepMiddlewareTests: XCTestCase {
             timestamp: monitoringStart.addingTimeInterval(600)
         )
         store.dispatch(.hrvComputed(HRVMetrics(rmssd: 45, hr: 58)))
-        try? await Task.sleep(nanoseconds: 250_000_000)
+        await assertEventually {
+            sleepRepo.inferenceCallCount == 2 &&
+            store.state.sleep.currentSession?.stages.first?.endAt == monitoringStart.addingTimeInterval(600)
+        }
 
         let session = try XCTUnwrap(store.state.sleep.currentSession)
         XCTAssertEqual(session.stages.count, 1)

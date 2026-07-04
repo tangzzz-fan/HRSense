@@ -28,7 +28,9 @@ final class SimulatedPeripheralOTATests: XCTestCase {
         XCTAssertEqual(applyResponses?.first?.opCode, .otaApply)
         XCTAssertEqual(applyResponses?.first?.payload.first, OTAStatusCode.success.rawValue)
 
-        try await Task.sleep(nanoseconds: 1_000_000_000)
+        await assertEventually(timeout: 2) {
+            peripheral.currentFirmwareVersion == "1.0.1-sim"
+        }
 
         XCTAssertEqual(peripheral.currentFirmwareVersion, "1.0.1-sim")
 
@@ -51,5 +53,27 @@ final class SimulatedPeripheralOTATests: XCTestCase {
         XCTAssertEqual(helloAck?.opCode, .helloAck)
         let firmwareParam = helloAck?.params.first(where: { $0.tag == .sensorStatus })
         XCTAssertEqual(String(bytes: firmwareParam?.value ?? [], encoding: .utf8), "1.0.1-sim")
+    }
+}
+
+private extension XCTestCase {
+    /// Polls a synchronous condition until it succeeds or the timeout elapses.
+    func assertEventually(
+        timeout: TimeInterval = 2,
+        pollInterval: TimeInterval = 0.02,
+        file: StaticString = #filePath,
+        line: UInt = #line,
+        _ condition: @escaping () -> Bool
+    ) async {
+        let deadline = Date().addingTimeInterval(timeout)
+
+        while Date() < deadline {
+            if condition() {
+                return
+            }
+            try? await Task.sleep(nanoseconds: UInt64(pollInterval * 1_000_000_000))
+        }
+
+        XCTFail("Condition was not satisfied within \(timeout) seconds.", file: file, line: line)
     }
 }

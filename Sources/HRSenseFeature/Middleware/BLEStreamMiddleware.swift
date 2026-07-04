@@ -8,16 +8,20 @@ public func makeBLEStreamMiddleware(
     deviceRepo: any DeviceRepository,
     throttleInterval: TimeInterval = 0.5
 ) -> Middleware<AppState, Action> {
-    { store, action, next in
+    var heartRateTask: Task<Void, Never>?
+
+    return { store, action, next in
         next(action)
 
         switch action {
         case .connectionStateChanged(.connected), .connectionStateChanged(.restoredConnected):
-            Task {
+            heartRateTask?.cancel()
+            heartRateTask = Task {
                 var lastDispatchTime = Date.distantPast
                 var batch: [HeartRateSample] = []
 
                 for await sample in deviceRepo.heartRateStream {
+                    guard !Task.isCancelled else { break }
                     batch.append(sample)
                     let now = Date()
                     if now.timeIntervalSince(lastDispatchTime) >= throttleInterval {
@@ -30,6 +34,10 @@ public func makeBLEStreamMiddleware(
                     }
                 }
             }
+
+        case .connectionStateChanged(.disconnected):
+            heartRateTask?.cancel()
+            heartRateTask = nil
 
         default:
             break

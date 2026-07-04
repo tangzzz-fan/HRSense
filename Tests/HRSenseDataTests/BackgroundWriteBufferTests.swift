@@ -35,7 +35,13 @@ final class BackgroundWriteBufferTests: XCTestCase {
         )
 
         try await buffer.enqueue(["a", "b"])
-        try await Task.sleep(nanoseconds: 150_000_000)
+        let flushCompleted = await waitUntil(timeout: 2) {
+            let pendingAfterTimerFlush = await buffer.pendingCount()
+            let flushesAfterTimer = await recorder.snapshot()
+            return pendingAfterTimerFlush == 0 && flushesAfterTimer == [["a", "b"]]
+        }
+        XCTAssertTrue(flushCompleted, "Timed flush did not complete within the CI-safe timeout.")
+        guard flushCompleted else { return }
 
         let pendingAfterTimerFlush = await buffer.pendingCount()
         let flushesAfterTimer = await recorder.snapshot()
@@ -60,6 +66,26 @@ final class BackgroundWriteBufferTests: XCTestCase {
         let pendingAfterManualFlush = await buffer.pendingCount()
         XCTAssertEqual(flushesAfterManualFlush, [[42]])
         XCTAssertEqual(pendingAfterManualFlush, 0)
+    }
+}
+
+private extension XCTestCase {
+    /// Polls an async condition until it succeeds or the timeout elapses.
+    func waitUntil(
+        timeout: TimeInterval = 2,
+        pollInterval: TimeInterval = 0.02,
+        _ condition: @escaping () async -> Bool
+    ) async -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+
+        while Date() < deadline {
+            if await condition() {
+                return true
+            }
+            try? await Task.sleep(nanoseconds: UInt64(pollInterval * 1_000_000_000))
+        }
+
+        return false
     }
 }
 

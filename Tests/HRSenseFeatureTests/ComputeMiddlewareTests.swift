@@ -28,7 +28,9 @@ final class ComputeMiddlewareTests: XCTestCase {
             HeartRateSample(timestamp: Date(), heartRate: 73, rrIntervals: [790, 810]),
         ]
         store.dispatch(.heartRateReceived(samples))
-        try? await Task.sleep(nanoseconds: 400_000_000)
+        await assertEventually {
+            computeRepo.computeCallCount == 1
+        }
         XCTAssertEqual(computeRepo.computeCallCount, 1)
     }
 
@@ -40,7 +42,11 @@ final class ComputeMiddlewareTests: XCTestCase {
             HeartRateSample(timestamp: Date(), heartRate: 73, rrIntervals: [790, 810]),
         ]
         store.dispatch(.heartRateReceived(samples))
-        try? await Task.sleep(nanoseconds: 400_000_000)
+        await assertEventually {
+            store.state.metrics.computationStatus == .ready &&
+            store.state.metrics.latestHRV != nil &&
+            store.state.inference.latestFeatures != nil
+        }
         XCTAssertEqual(store.state.metrics.computationStatus, .ready)
         XCTAssertNotNil(store.state.metrics.latestHRV)
         XCTAssertNotNil(store.state.inference.latestFeatures)
@@ -57,7 +63,9 @@ final class ComputeMiddlewareTests: XCTestCase {
         store.dispatch(.clearSamples)
         let samples2 = [HeartRateSample(timestamp: Date(), heartRate: 73, rrIntervals: [])]
         store.dispatch(.heartRateReceived(samples2))
-        try? await Task.sleep(nanoseconds: 400_000_000)
+        await assertEventually {
+            computeRepo.computeCallCount == 1
+        }
         XCTAssertEqual(computeRepo.computeCallCount, 1)
     }
 
@@ -72,7 +80,9 @@ final class ComputeMiddlewareTests: XCTestCase {
             HeartRateSample(timestamp: Date(), heartRate: 73, rrIntervals: [790, 810]),
         ]
         store.dispatch(.heartRateReceived(samples))
-        try? await Task.sleep(nanoseconds: 400_000_000)
+        await assertEventually {
+            store.state.error == .computeFailed
+        }
         XCTAssertEqual(store.state.error, .computeFailed)
     }
 
@@ -91,7 +101,9 @@ final class ComputeMiddlewareTests: XCTestCase {
         ]
         store.dispatch(.heartRateReceived(samples))
         store.dispatch(.heartRateReceived(samples))
-        try? await Task.sleep(nanoseconds: 400_000_000)
+        await assertEventually {
+            computeRepo.computeCallCount == 1
+        }
         XCTAssertEqual(computeRepo.computeCallCount, 1)
     }
 
@@ -106,7 +118,9 @@ final class ComputeMiddlewareTests: XCTestCase {
         store.dispatch(.heartRateReceived(samples))
 
         XCTAssertEqual(store.state.metrics.computationStatus, .computing)
-        try? await Task.sleep(nanoseconds: 400_000_000)
+        await assertEventually {
+            store.state.metrics.computationStatus == .ready
+        }
         XCTAssertEqual(store.state.metrics.computationStatus, .ready)
     }
 }

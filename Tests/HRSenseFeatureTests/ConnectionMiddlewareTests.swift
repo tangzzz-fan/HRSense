@@ -20,7 +20,9 @@ final class ConnectionMiddlewareTests: XCTestCase {
         let repo = FakeDeviceRepository()
         let store = makeStore(repo: repo)
         store.dispatch(.startScanning)
-        try? await Task.sleep(nanoseconds: 200_000_000)
+        await assertEventually {
+            repo.scanCallCount == 1
+        }
         XCTAssertEqual(repo.scanCallCount, 1)
     }
 
@@ -37,7 +39,9 @@ final class ConnectionMiddlewareTests: XCTestCase {
         let repo = FakeDeviceRepository()
         let store = makeStore(repo: repo)
         store.dispatch(.connect(deviceID: UUID()))
-        try? await Task.sleep(nanoseconds: 300_000_000)
+        await assertEventually {
+            repo.connectCallIDs.count == 1 && repo.handshakeCallCount == 1
+        }
         XCTAssertEqual(repo.connectCallIDs.count, 1)
         XCTAssertEqual(repo.handshakeCallCount, 1)
     }
@@ -56,7 +60,9 @@ final class ConnectionMiddlewareTests: XCTestCase {
         let store = makeStore(repo: repo)
         store.dispatch(.startScanning)
         repo.emitConnectionState(.connecting)
-        try? await Task.sleep(nanoseconds: 200_000_000)
+        await assertEventually {
+            store.state.connection == .connecting
+        }
         XCTAssertEqual(store.state.connection, .connecting)
     }
 
@@ -75,7 +81,9 @@ final class ConnectionMiddlewareTests: XCTestCase {
 
         store.dispatch(.startScanning)
         repo.emitDiscoveredDevice(device)
-        try? await Task.sleep(nanoseconds: 200_000_000)
+        await assertEventually {
+            store.state.discoveredDevices == [device]
+        }
 
         XCTAssertEqual(store.state.discoveredDevices, [device])
     }
@@ -87,7 +95,9 @@ final class ConnectionMiddlewareTests: XCTestCase {
         let device = DeviceInfo(peripheralIdentifier: UUID(), name: "TestDev", model: "M2",
                                 firmwareVersion: "2.0", protocolVersion: 1, capabilities: 0)
         repo.emitDeviceInfo(device)
-        try? await Task.sleep(nanoseconds: 200_000_000)
+        await assertEventually {
+            store.state.device?.name == "TestDev"
+        }
         XCTAssertEqual(store.state.device?.name, "TestDev")
         XCTAssertEqual(store.state.device?.firmwareVersion, "2.0")
     }
@@ -99,7 +109,9 @@ final class ConnectionMiddlewareTests: XCTestCase {
 
         store.dispatch(.startScanning)
         repo.emitRestoredPeripheralIDs([restoredID])
-        try? await Task.sleep(nanoseconds: 200_000_000)
+        await assertEventually {
+            repo.restoreCallCount == 1 && store.state.connection == .restoredConnected
+        }
 
         XCTAssertEqual(repo.restoreCallCount, 1)
         XCTAssertEqual(store.state.connection, .restoredConnected)
@@ -113,7 +125,9 @@ final class ConnectionMiddlewareTests: XCTestCase {
 
         store.dispatch(.startScanning)
         repo.emitRestoredPeripheralIDs([UUID()])
-        try? await Task.sleep(nanoseconds: 250_000_000)
+        await assertEventually {
+            repo.restoreCallCount == 1 && store.state.connection == .disconnected && store.state.error != nil
+        }
 
         XCTAssertEqual(repo.restoreCallCount, 1)
         XCTAssertEqual(store.state.connection, .disconnected)
@@ -142,7 +156,9 @@ final class ConnectionMiddlewareTests: XCTestCase {
         repo.handshakeResult = .failure(AppError.handshakeFailed(reason: "test"))
         let store = makeStore(repo: repo)
         store.dispatch(.connect(deviceID: UUID()))
-        try? await Task.sleep(nanoseconds: 300_000_000)
+        await assertEventually {
+            store.state.error != nil
+        }
         XCTAssertNotNil(store.state.error)
     }
 
@@ -152,7 +168,9 @@ final class ConnectionMiddlewareTests: XCTestCase {
         let store = makeStore(repo: repo)
 
         store.dispatch(.connect(deviceID: UUID()))
-        try? await Task.sleep(nanoseconds: 300_000_000)
+        await assertEventually {
+            store.state.connection == .connected
+        }
 
         XCTAssertEqual(store.state.connection, .connected)
     }

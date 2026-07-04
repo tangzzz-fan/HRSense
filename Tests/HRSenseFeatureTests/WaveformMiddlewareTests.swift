@@ -49,7 +49,9 @@ final class WaveformMiddlewareTests: XCTestCase {
         ]
         let store = makeStore(buffer: buffer)
         store.dispatch(.connectionStateChanged(.connected))
-        try? await Task.sleep(nanoseconds: 200_000_000)
+        await assertEventually {
+            store.state.waveform.isStreaming && buffer.readCount > 0
+        }
         XCTAssertTrue(store.state.waveform.isStreaming)
         XCTAssertGreaterThan(buffer.readCount, 0)
     }
@@ -59,9 +61,10 @@ final class WaveformMiddlewareTests: XCTestCase {
         buffer._metrics = WaveformMetrics()
         let store = makeStore(buffer: buffer)
         store.dispatch(.connectionStateChanged(.connected))
-        try? await Task.sleep(nanoseconds: 200_000_000)
-        // Metrics should have been dispatched (even if zero)
-        _ = store.state.waveform.metrics
+        await assertEventually {
+            buffer.readCount > 0
+        }
+        XCTAssertGreaterThan(buffer.readCount, 0)
     }
 
     func test_startsPollingOnRestoredConnected() async {
@@ -71,7 +74,9 @@ final class WaveformMiddlewareTests: XCTestCase {
         ]
         let store = makeStore(buffer: buffer)
         store.dispatch(.connectionStateChanged(.restoredConnected))
-        try? await Task.sleep(nanoseconds: 200_000_000)
+        await assertEventually {
+            store.state.waveform.isStreaming && buffer.readCount > 0
+        }
         XCTAssertTrue(store.state.waveform.isStreaming)
         XCTAssertGreaterThan(buffer.readCount, 0)
     }
@@ -80,7 +85,9 @@ final class WaveformMiddlewareTests: XCTestCase {
         let buffer = FakeWaveformRingBuffer()
         let store = makeStore(buffer: buffer)
         store.dispatch(.connectionStateChanged(.connected))
-        try? await Task.sleep(nanoseconds: 200_000_000)
+        await assertEventually {
+            buffer.readCount > 0
+        }
         let readsBefore = buffer.readCount
         store.dispatch(.connectionStateChanged(.disconnected))
         try? await Task.sleep(nanoseconds: 300_000_000)
@@ -99,7 +106,9 @@ final class WaveformMiddlewareTests: XCTestCase {
         ]
         let store = makeStore(buffer: buffer)
         store.dispatch(.connectionStateChanged(.connected))
-        try? await Task.sleep(nanoseconds: 220_000_000)
+        await assertEventually {
+            buffer.readCount > 0
+        }
         let readsBeforeBackground = buffer.readCount
 
         store.dispatch(.didEnterBackground)

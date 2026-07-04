@@ -21,7 +21,7 @@ final class BLEStreamMiddlewareTests: XCTestCase {
         let store = makeStore(repo: repo)
         let sample = HeartRateSample(timestamp: Date(), heartRate: 72)
         repo.emitHeartRateSample(sample)
-        try? await Task.sleep(nanoseconds: 300_000_000)
+        try? await Task.sleep(nanoseconds: 50_000_000)
         XCTAssertNil(store.state.live.currentHeartRate)
     }
 
@@ -31,7 +31,9 @@ final class BLEStreamMiddlewareTests: XCTestCase {
         store.dispatch(.connectionStateChanged(.connected))
         let sample = HeartRateSample(timestamp: Date(), heartRate: 72)
         repo.emitHeartRateSample(sample)
-        try? await Task.sleep(nanoseconds: 400_000_000)
+        await assertEventually {
+            store.state.live.currentHeartRate == 72
+        }
         XCTAssertEqual(store.state.live.currentHeartRate, 72)
     }
 
@@ -41,7 +43,9 @@ final class BLEStreamMiddlewareTests: XCTestCase {
         store.dispatch(.connectionStateChanged(.restoredConnected))
         let sample = HeartRateSample(timestamp: Date(), heartRate: 75)
         repo.emitHeartRateSample(sample)
-        try? await Task.sleep(nanoseconds: 400_000_000)
+        await assertEventually {
+            store.state.live.currentHeartRate == 75
+        }
         XCTAssertEqual(store.state.live.currentHeartRate, 75)
     }
 
@@ -54,7 +58,9 @@ final class BLEStreamMiddlewareTests: XCTestCase {
         for i in 1...3 {
             repo.emitHeartRateSample(HeartRateSample(timestamp: Date(), heartRate: 60 + i))
         }
-        try? await Task.sleep(nanoseconds: 800_000_000)
+        await assertEventually {
+            store.state.live.currentHeartRate != nil
+        }
         XCTAssertNotNil(store.state.live.currentHeartRate)
     }
 }

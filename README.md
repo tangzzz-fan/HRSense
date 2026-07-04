@@ -1,12 +1,91 @@
 # HRSense
 
-一款连接蓝牙心率设备的 iOS App，采用 **Clean Architecture + Redux** 架构。设备通过 **自定义协议栈（承载于 BLE GATT 之上）** 上报心率等生理数据，App 负责实时展示、指标计算（集成 C++ 计算库）以及基于 **CoreML** 的推理。
+HRSense 是一个面向心率与生理信号采集场景的 iOS 项目，采用 **Clean Architecture + Redux** 架构。设备通过 **自定义 BLE GATT 协议栈** 上报心率、RR 间期、波形与 OTA 相关数据，App 负责展示、计算与推理。
 
-由于当前没有实体硬件，配套一个运行在 **macOS** 上的 **模拟设备（BLE Peripheral）**，用于在没有硬件的情况下完成端到端开发、联调与自动化测试。
+当前没有实体硬件，因此仓库同时包含一个运行在 **macOS** 上的 **模拟设备（BLE Peripheral）**，用于协议联调、回归验证、场景脚本测试与 CI。
 
-> 当前阶段：**规划 / 文档阶段**。本仓库暂不落地实现代码，仅沉淀架构与协议规划文档，作为后续开发的依据。
+## 当前状态
 
----
+- 当前处于 **实现阶段**，仓库中已经包含真实 SwiftPM 代码、`Apps/` 下的两个 App shell，以及根级 `HRSense.xcworkspace`
+- 设计文档仍然是架构与协议契约来源，但日常开发、构建与测试应以当前代码仓库为准
+- 自定义协议、模拟器、App BLE 连接、Redux 状态流、波形链路、OTA 骨架、可观测性骨架、CoreML/C++ 计算骨架都已落地，里程碑闭环程度以 `docs/11-delivery-plan.md` 为准
+
+## 快速开始
+
+### 开发入口
+
+- 统一从 `HRSense.xcworkspace` 打开工程
+- 不要同时单独打开 `Apps/HRSenseApp/HRSenseApp.xcodeproj` 和 `Apps/HRSenseSimulator/HRSenseSimulator.xcodeproj`
+- 根目录 `Package.swift` 是共享业务逻辑的主入口；两个 App 工程只承担入口、权限与组合根职责
+
+### 标准验证命令
+
+```bash
+swift build
+swift test
+swift test --filter HRSenseProtocolTests
+nocorrect xcodebuild -workspace HRSense.xcworkspace -scheme HRSenseApp \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' build
+nocorrect xcodebuild -workspace HRSense.xcworkspace -scheme HRSenseSimulator \
+  -destination 'platform=macOS' build
+```
+
+### 工作规则
+
+- 任何协议变更先更新 `docs/03-ble-gatt-protocol.md`，再更新 `HRSenseProtocol`，最后同步 App 与 Simulator
+- 涉及 BLE 契约、场景引擎、headless 模式或故障注入的改动，必须同时验证 Simulator 路径
+- 里程碑完成标准不只看编译通过，还要对齐 `docs/11-delivery-plan.md` 中的验收项
+
+## 核心架构
+
+1. **iOS = BLE Central，macOS 模拟器 = BLE Peripheral**，两端均基于 CoreBluetooth。
+2. **`HRSenseProtocol` 是共享协议包**，负责 L2-L4 的 framing、命令、数据编解码，App 与 Simulator 共用同一份实现，避免协议漂移。
+3. **自定义协议栈运行在 BLE GATT 之上**，使用 128-bit 自定义 UUID，而非标准 Heart Rate Service。
+4. **App 架构采用 Clean + 自建 Redux**，基于 [`TGReduxKit`](https://github.com/tangzzz-fan/TGReduxKit)，Reducer 保持纯函数，BLE/计算/CoreML/OTA 统一放入 Middleware。
+5. **重计算链路采用 C ABI**，Swift 调用 `HRSenseCompute`，底层桥接到 `HRSenseComputeCxx`。
+6. **CoreML 采用 placeholder-model-first 策略**，先打通端到端推理链路，再替换真实模型。
+7. **Simulator 是长期回归资产**，而不是一次性桩代码；其职责包括脚本场景、故障注入、headless 执行与 CI 支撑。
+
+## 当前仓库结构
+
+```text
+HRSense/
+├── Package.swift
+├── HRSense.xcworkspace
+├── Apps/
+│   ├── HRSenseApp/
+│   └── HRSenseSimulator/
+├── Sources/
+│   ├── HRSenseProtocol/
+│   ├── HRSenseCore/
+│   ├── HRSenseComputeCxx/
+│   ├── HRSenseCompute/
+│   ├── HRSenseData/
+│   ├── HRSenseFeature/
+│   ├── HRSenseAppUI/
+│   ├── HRSenseSimulatorKit/
+│   ├── HRSenseSimulatorUI/
+│   └── HRSenseSimulator/
+├── Tests/
+├── Models/
+├── Scenarios/
+├── docs/
+├── proto/
+├── tools/
+└── THIRD_PARTY_LICENSES.md
+```
+
+## 模块概览
+
+- `HRSenseProtocol`: 共享协议层，负责分帧、重组、CRC、命令与数据编解码
+- `HRSenseCore`: 领域实体、仓储协议、用例抽象、错误模型
+- `HRSenseComputeCxx` / `HRSenseCompute`: C++ 计算实现与 Swift 桥接
+- `HRSenseData`: BLE 数据源、Repository 实现、持久化、Metrics、OTA Repository
+- `HRSenseFeature`: Redux 状态、动作、Reducer、Middleware、SwiftUI 表现层
+- `HRSenseAppUI`: App shell 组合根与容器视图
+- `HRSenseSimulatorKit`: 模拟器核心能力，包括 Peripheral、场景引擎、数据生成器、OTA 状态机、故障注入与 headless runner
+- `HRSenseSimulatorUI`: 模拟器 GUI 界面
+- `HRSenseSimulator`: Simulator CLI 入口
 
 ## 文档索引
 
@@ -14,49 +93,14 @@
 | --- | --- |
 | [docs/00-overview.md](docs/00-overview.md) | 项目总览、目标、范围、关键决策、术语表 |
 | [docs/01-roadmap.md](docs/01-roadmap.md) | 里程碑路线图（概念轨道 / 并行与依赖） |
-| [docs/11-delivery-plan.md](docs/11-delivery-plan.md) | **落地计划（Milestone + 验收标准）· 执行标杆** |
+| [docs/11-delivery-plan.md](docs/11-delivery-plan.md) | 里程碑与验收标准，当前执行口径 |
 | [docs/02-architecture.md](docs/02-architecture.md) | 系统整体架构、组件划分、数据流 |
-| [docs/03-ble-gatt-protocol.md](docs/03-ble-gatt-protocol.md) | 自定义协议栈分层、GATT Profile、分帧/可靠传输/命令定义 |
-| [docs/04-app-clean-redux.md](docs/04-app-clean-redux.md) | App 侧 Clean Architecture 分层与 Redux 单向数据流 |
-| [docs/05-simulator-macos.md](docs/05-simulator-macos.md) | macOS 模拟设备设计（Peripheral、场景引擎、故障注入） |
-| [docs/06-coreml-and-compute.md](docs/06-coreml-and-compute.md) | CoreML 推理管线与 C++ 计算层集成方式 |
-| [docs/07-ota-dfu.md](docs/07-ota-dfu.md) | OTA / DFU 固件升级协议与流程设计（仅模拟用途）|
-| [docs/08-project-structure.md](docs/08-project-structure.md) | 项目结构与文件组织（Package.swift + 各 SPM 包 + 两个 App 外壳骨架）|
-| [docs/09-jd-coverage-analysis.md](docs/09-jd-coverage-analysis.md) | 对照目标 JD 的覆盖度/差距分析与补充建议 |
-| [docs/10-observability.md](docs/10-observability.md) | 可观测性：日志体系 / 崩溃分析 / 监控指标 |
-| [docs/specs/](docs/specs/) | 细化设计 spec 目录（0001–0004，含模板）|
-
-## 核心架构决策（摘要）
-
-1. **iOS = BLE Central，macOS 模拟器 = BLE Peripheral**，均基于 CoreBluetooth。
-2. **协议编解码下沉为独立 Swift Package（`HRSenseProtocol`）**，App 与模拟器共享同一份实现，保证两端一致、避免协议漂移。
-3. **自定义协议栈分 4 层**：GATT 传输层 → 分帧/可靠传输层 → 会话/命令层 → 应用数据层。使用 128-bit 自定义 UUID，而非标准 Heart Rate Service。
-4. **App 架构 = 自建轻量 Redux**，基于开源库 [`TGReduxKit`](https://github.com/tangzzz-fan/TGReduxKit)（MIT，SwiftUI/iOS 17+，基于 Swift Observation）。BLE / 计算 / 推理等副作用统一在 Middleware（Effects）中触发，View 只消费 State。
-5. **重计算（HRV/滤波/特征提取）交给 C++ 计算库**，采用 **C ABI 方案**（C++ 暴露纯 C 接口，Swift 桥接调用，SwiftPM 打包；详见 spec 0001）。
-6. **面向"未来对接真实硬件"设计**：协议版本协商 + 能力发现，把模拟器与真实设备的差异收敛在协议层。
-7. **CoreML 端上推理**：框架本身为 Apple 私有随 SDK 提供、无开源义务；转换工具 `coremltools` 为 BSD-3-Clause；许可风险主要在"模型来源"（外部权重/数据集），需登记核对（详见 `docs/06`）。
-
-## 构建方式：SwiftPM 优先
-
-项目**默认使用 Swift Package Manager (SwiftPM)** 组织所有可复用逻辑：协议、领域、数据、计算层均为**本地 SwiftPM 包**（可独立编译与单测）。第三方依赖（如 `TGReduxKit`）也通过 SwiftPM 引入。
-
-> 现实约束：iOS App 与 macOS 模拟器这两个**可执行程序**需要 `Info.plist` / entitlements / 蓝牙权限 / App 打包，因此各自保留一个**轻量 Xcode app target 作为"外壳"**，仅负责入口、权限与组装，业务逻辑全部来自 SwiftPM 包。这样既享受 SwiftPM 的模块化与可测性，又满足 App 的打包与权限需求。
-
-## 目录规划（SwiftPM-first，概览）
-
-```
-HRSense/
-├── Package.swift               # 核心库：一个包多产品(多 target)
-├── Sources/                    # SPM 库 target：Protocol / Core / Compute(+Cxx) / Data / Feature / SimulatorKit
-├── Tests/                      # 各 target 单测
-├── Apps/                       # 两个薄外壳
-│   ├── HRSenseApp/             #   iOS App(Central)：入口 + 权限 + 组装
-│   └── HRSenseSimulator/       #   macOS 模拟设备(Peripheral)
-├── Models/                     # CoreML 模型(.mlpackage，Git LFS)
-├── Scenarios/                  # 模拟器场景脚本/录制数据集
-├── docs/                       # 本仓库文档
-└── THIRD_PARTY_LICENSES.md     # 第三方依赖 / 模型来源与许可登记
-```
-
-> 完整结构、`Package.swift` 示例、C ABI target/modulemap、App 外壳与依赖关系图详见 **[docs/08-project-structure.md](docs/08-project-structure.md)**。
-> 注：以上为规划，尚未创建。
+| [docs/03-ble-gatt-protocol.md](docs/03-ble-gatt-protocol.md) | 自定义 BLE 协议契约 |
+| [docs/04-app-clean-redux.md](docs/04-app-clean-redux.md) | App 侧 Clean + Redux 设计 |
+| [docs/05-simulator-macos.md](docs/05-simulator-macos.md) | macOS 模拟设备设计 |
+| [docs/06-coreml-and-compute.md](docs/06-coreml-and-compute.md) | CoreML 与 C++ 计算链路 |
+| [docs/07-ota-dfu.md](docs/07-ota-dfu.md) | OTA/DFU 设计 |
+| [docs/08-project-structure.md](docs/08-project-structure.md) | 项目结构规划文档，包含早期结构设计背景 |
+| [docs/09-jd-coverage-analysis.md](docs/09-jd-coverage-analysis.md) | JD 能力覆盖分析 |
+| [docs/10-observability.md](docs/10-observability.md) | 日志、指标、诊断与监控 |
+| [docs/specs/](docs/specs/) | 细化 spec 目录与模板 |

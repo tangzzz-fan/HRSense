@@ -24,7 +24,11 @@ final class InferenceMiddlewareTests: XCTestCase {
 
         XCTAssertEqual(store.state.inference.latestFeatures, featureVector)
         XCTAssertEqual(store.state.inference.status, .running)
-        try? await Task.sleep(nanoseconds: 300_000_000)
+        await assertEventually {
+            inferenceRepo.inferenceCallCount == 1 &&
+            store.state.inference.status == .completed &&
+            store.state.inference.latestResult?.label == "Baseline"
+        }
         XCTAssertEqual(inferenceRepo.inferenceCallCount, 1)
         XCTAssertEqual(inferenceRepo.lastReceivedFeatures, featureVector.values)
         XCTAssertEqual(store.state.inference.status, .completed)
@@ -40,7 +44,9 @@ final class InferenceMiddlewareTests: XCTestCase {
         store.dispatch(.featuresExtracted(featureVector))
 
         XCTAssertEqual(store.state.inference.status, .running)
-        try? await Task.sleep(nanoseconds: 300_000_000)
+        await assertEventually {
+            store.state.error == .inferenceFailed && store.state.inference.status == .idle
+        }
         XCTAssertEqual(store.state.error, .inferenceFailed)
         XCTAssertEqual(store.state.inference.status, .idle)
     }

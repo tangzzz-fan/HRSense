@@ -15,16 +15,15 @@ public func makeWaveformMiddleware(
     pollInterval: TimeInterval = 0.1,  // 10 Hz polling
     backgroundPollInterval: TimeInterval = 0.5
 ) -> Middleware<AppState, Action> {
-    var pollTaskStarted = false
+    var pollTask: Task<Void, Never>?
 
     return { store, action, next in
         next(action)
 
         // Start poll task on first connection to prevent duplicate subscriptions
-        if (action == .connectionStateChanged(.connected) || action == .connectionStateChanged(.restoredConnected)),
-           !pollTaskStarted {
-            pollTaskStarted = true
-            Task {
+        if action == .connectionStateChanged(.connected) || action == .connectionStateChanged(.restoredConnected) {
+            guard pollTask == nil else { return }
+            pollTask = Task {
                 while !Task.isCancelled {
                     let lifecycle = await MainActor.run { store.state.lifecycle }
                     if lifecycle == .background {
@@ -56,7 +55,8 @@ public func makeWaveformMiddleware(
 
         // Reset poll on disconnect
         if case .connectionStateChanged(.disconnected) = action {
-            pollTaskStarted = false
+            pollTask?.cancel()
+            pollTask = nil
         }
     }
 }
