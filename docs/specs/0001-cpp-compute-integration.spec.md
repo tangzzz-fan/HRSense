@@ -67,7 +67,7 @@ int hrs_extract_features(const double* window, size_t count,
 
 ## 8. 里程碑 / 任务拆分
 - [x] 选定集成方案：C ABI。
-- [ ] 定义窄 C 接口签名与数据类型（本 spec 定稿）。
+- [ ] 定义窄 C 接口签名与数据类型（本 spec 定稿；**波形分析见 [0005](0005-ecg-ppg-analysis-pipeline.spec.md)**）。
 - [ ] 搭建可编译 + 可单测的最小骨架（`Compute/` SwiftPM target）。
 - [ ] 接入 Redux Compute Middleware。
 

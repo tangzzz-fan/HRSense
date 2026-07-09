@@ -15,6 +15,7 @@
 | [0002](0002-coreml-inference-pipeline.spec.md) | CoreML 推理管线（落地路线）| draft (决策已固化) | 管线优先/14维特征契约/I-O schema/占位模型/转换与合规；含睡眠分期扩展任务 |
 | [0003](0003-waveform-high-throughput.spec.md) | 实时波形高吞吐 + 高性能可视化 | draft (决策已固化) | 波形通道/吞吐优化/背压降采样/自绘渲染/度量指标 |
 | [0004](0004-local-storage.spec.md) | 本地存储与数据保留 | draft (决策已固化) | SwiftData+文件混合/数据模型/保留归档策略 |
+| [0005](0005-ecg-ppg-analysis-pipeline.spec.md) | ECG/PPG 波形数据分析管道 | draft (review) | C++ DSP/检峰/RR/质量/波形特征 → 接入 HRV+CoreML |
 
 > 协议侧 Open Questions（UUID/CRC/能力位图/时间戳/字节序/可靠性）已直接在 [`../03-ble-gatt-protocol.md`](../03-ble-gatt-protocol.md) §8 内联冻结，不再单列 spec。
 

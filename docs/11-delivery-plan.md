@@ -119,12 +119,14 @@ graph LR
 - **依赖**：M4（日志基线自 M1 起持续建设）
 
 ## M8 · 计算（C++）+ CoreML 推理
-- **目标**：HR/HRV 特征(C++) + 压力二分类推理接入。（见 [spec 0001](specs/0001-cpp-compute-integration.spec.md)、[spec 0002](specs/0002-coreml-inference-pipeline.spec.md)）
-- **交付物**：`HRSenseComputeCxx/Compute`(C ABI)；14 维特征；`CoreMLService` + 占位模型；Inference Middleware。
+- **目标**：**ECG/PPG 波形 → RR → HRV**(C++) + 压力二分类推理接入。（见 [spec 0001](specs/0001-cpp-compute-integration.spec.md)、[spec 0002](specs/0002-coreml-inference-pipeline.spec.md)、**[spec 0005](specs/0005-ecg-ppg-analysis-pipeline.spec.md)**）
+- **交付物**：`HRSenseComputeCxx/Compute`(C ABI)；**`hrs_waveform_analyze` + 波形 8 维特征**；14 维 HRV；`CoreMLService` + 占位模型；`WaveformAnalysisMiddleware` + Inference Middleware。
 - **验收标准**：
+  - [ ] **波形分析黄金值**：合成 ECG/PPG → RR/HR/quality 误差在 spec 0005 阈值内。
   - [ ] C++ 计算**黄金值对拍**：给定 RR 序列，RMSSD/SDNN 等与参考值误差 < 阈值。
+  - [ ] 真机+模拟器：derived RR → `hrvComputed` → 占位模型 → UI（5min 内）。
+  - [ ] 低 `quality_score` 时不触发 CoreML（门控可证）。
   - [ ] 特征输出 14 维、口径与训练侧一致（契约测试）。
-  - [ ] 占位模型端到端：特征→predict→`InferenceResult`→State→UI 显示。
   - [ ] 5min 窗 / 30s 步长触发正确；单次推理耗时记录（目标 <X ms）。
 - **依赖**：M4
 
